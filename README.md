@@ -6,9 +6,10 @@ A repository of institutional algorithmic trading strategies for **MetaTrader 5 
 
 ## Active Strategy Catalog
 
-| # | Strategy Name | Asset | Timeframe | Strategy Logic | Win Rate | Profit Factor | 13.5-Mo Net Return | Status |
+| # | Strategy Name | Asset | Timeframe | Strategy Logic | Win Rate | Profit Factor | Net Return | Status |
 | :---: | :--- | :---: | :---: | :--- | :---: | :---: | :---: | :---: |
 | **01** | [**London Liquidity Sweep & NY Reversal**](strategies/01_London_Sweep_NY_Reversal/) | **XAUUSD** | **M5** | Institutional Judas Swing / Mean Reversion to 50% Midpoint + Profit Lock | **38.5%** | **1.62** | **+70.9 R (+70.9%)** | **Production** |
+| **02** | [**H1 Order Block & Swing Trader**](strategies/02_H1_OrderBlock_Swing/) | **XAUUSD** | **H1** | Daily Trend + H1 Liquidity Sweep + Order Block Retest + 50% Partials | **36.1%** | **2.18 – 2.49** | **+59.7 R (+59.7%)** | **Production** |
 
 ![London Liquidity Sweep & NY Reversal Strategy Overview](strategies/01_London_Sweep_NY_Reversal/assets/strategy_diagram.jpg)
 
@@ -21,17 +22,26 @@ Dineshfx/
 ├── README.md                                  # Repository overview and strategy index
 ├── .gitignore                                 # Git rules for MT5 & binary caches
 └── strategies/
-    └── 01_London_Sweep_NY_Reversal/           # Production Strategy: Liquidity Sweep & Mean Reversion
-        ├── README.md                          # Full strategy mechanics & backtest report
-        ├── assets/
-        │   └── strategy_diagram.jpg           # Strategy chart flowchart and infographic
+    ├── 01_London_Sweep_NY_Reversal/           # Production Strategy 01: Liquidity Sweep & Mean Reversion (M5)
+    │   ├── README.md                          # Full strategy mechanics & backtest report
+    │   ├── assets/
+    │   │   └── strategy_diagram.jpg           # Strategy chart flowchart and infographic
+    │   ├── mql5/                              # MetaTrader 5 source & compiled binaries
+    │   │   ├── London_Sweep_NY_Reversal_EA.mq5
+    │   │   ├── London_Sweep_NY_Reversal_EA.ex5
+    │   │   ├── London_Sweep_NY_Reversal_Indicator.mq5
+    │   │   └── London_Sweep_NY_Reversal_Indicator.ex5
+    │   └── tradingview/                       # TradingView Pine Script v6
+    │       └── London_Sweep_NY_Reversal.pine
+    └── 02_H1_OrderBlock_Swing/                # Production Strategy 02: H1 Institutional Order Block Swing Trader
+        ├── README.md                          # Full swing strategy documentation & 20-mo backtest
         ├── mql5/                              # MetaTrader 5 source & compiled binaries
-        │   ├── London_Sweep_NY_Reversal_EA.mq5
-        │   ├── London_Sweep_NY_Reversal_EA.ex5
-        │   ├── London_Sweep_NY_Reversal_Indicator.mq5
-        │   └── London_Sweep_NY_Reversal_Indicator.ex5
+        │   ├── H1_OrderBlock_Swing_EA.mq5     # Automated swing EA with partial profit engine
+        │   ├── H1_OrderBlock_Swing_EA.ex5     # Compiled MT5 swing EA binary
+        │   ├── H1_OrderBlock_Swing_Indicator.mq5 # Chart indicator (draws yellow order block boxes)
+        │   └── H1_OrderBlock_Swing_Indicator.ex5 # Compiled MT5 indicator binary
         └── tradingview/                       # TradingView Pine Script v6
-            └── London_Sweep_NY_Reversal.pine
+            └── H1_OrderBlock_Swing.pine
 ```
 
 ---

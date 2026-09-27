@@ -1,0 +1,71 @@
+//@version=6
+indicator("H1 Institutional Order Block & Swing Trader [Dineshfx]", overlay=true, max_boxes_count=100, max_labels_count=100)
+
+// --- Inputs ---
+grp_swing = "=== Swing & Order Block Detection ==="
+pivotSpan = input.int(8, "Swing Pivot Span (Bars)", group=grp_swing)
+minDisp = input.float(8.0, "Min Displacement ($ on Gold)", group=grp_swing)
+useDailyTrend = input.bool(true, "Filter by Daily 50 EMA Trend", group=grp_swing)
+slBuffer = input.float(2.0, "Stop Loss Buffer ($)", group=grp_swing)
+
+grp_visual = "=== Visual Styling ==="
+colorBearish = input.color(color.new(#facc15, 75), "Bearish Order Block (Yellow Box)", group=grp_visual)
+colorBearishBorder = input.color(#eab308, "Bearish Box Border", group=grp_visual)
+colorBullish = input.color(color.new(#10b981, 75), "Bullish Order Block (Green Box)", group=grp_visual)
+colorBullishBorder = input.color(#059669, "Bullish Box Border", group=grp_visual)
+
+// --- Daily 50 EMA Trend ---
+dailyEma = request.security(syminfo.tickerid, "D", ta.ema(close, 50))
+plot(useDailyTrend ? dailyEma : na, "Daily 50 EMA", color=color.new(color.orange, 30), linewidth=2)
+
+trendUp = not useDailyTrend or (close > dailyEma)
+trendDown = not useDailyTrend or (close < dailyEma)
+
+// --- Pivot Points ---
+pHigh = ta.pivothigh(high, pivotSpan, pivotSpan)
+pLow = ta.pivotlow(low, pivotSpan, pivotSpan)
+
+// --- Detect Bearish Order Block ---
+if not na(pHigh) and trendDown
+    // Check displacement: low of subsequent bars dropped significantly
+    float dropLow = low[pivotSpan - 1]
+    for k = 2 to 4
+        if low[pivotSpan - k] < dropLow
+            dropLow := low[pivotSpan - k]
+
+    if (pHigh - dropLow) >= minDisp
+        boxTop = pHigh
+        boxBottom = math.min(open[pivotSpan], close[pivotSpan])
+        boxLeft = bar_index[pivotSpan]
+        boxRight = bar_index + 40
+
+        box.new(left=boxLeft, top=boxTop, right=boxRight, bottom=boxBottom,
+                border_color=colorBearishBorder, border_width=1,
+                bgcolor=colorBearish, extend=extend.none)
+        
+        label.new(boxLeft, boxTop, "H1 SELL OB\nSL: " + str.tostring(pHigh + slBuffer, "#.##"), 
+                  color=color.red, textcolor=color.white, style=label.style_label_down, size=size.small)
+
+// --- Detect Bullish Order Block ---
+if not na(pLow) and trendUp
+    float rallyHigh = high[pivotSpan - 1]
+    for k = 2 to 4
+        if high[pivotSpan - k] > rallyHigh
+            rallyHigh := high[pivotSpan - k]
+
+    if (rallyHigh - pLow) >= minDisp
+        boxTop = math.max(open[pivotSpan], close[pivotSpan])
+        boxBottom = pLow
+        boxLeft = bar_index[pivotSpan]
+        boxRight = bar_index + 40
+
+        box.new(left=boxLeft, top=boxTop, right=boxRight, bottom=boxBottom,
+                border_color=colorBullishBorder, border_width=1,
+                bgcolor=colorBullish, extend=extend.none)
+
+        label.new(boxLeft, boxBottom, "H1 BUY OB\nSL: " + str.tostring(pLow - slBuffer, "#.##"), 
+                  color=color.green, textcolor=color.white, style=label.style_label_up, size=size.small)
+
+// --- Visual Alerts ---
+alertcondition(not na(pHigh) and trendDown, "New Bearish Order Block Formed", "New Bearish Order Block Formed on Gold H1!")
+alertcondition(not na(pLow) and trendUp, "New Bullish Order Block Formed", "New Bullish Order Block Formed on Gold H1!")
