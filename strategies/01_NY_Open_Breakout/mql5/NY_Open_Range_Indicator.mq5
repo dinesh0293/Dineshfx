@@ -25,10 +25,10 @@
 
 //--- Input Parameters
 input group "=== Session Times (Broker Server Time) ==="
-input string   InpRangeStartTime   = "15:00";    // Range Start Time (e.g. 15:00 = 8:00 AM NY)
-input string   InpRangeEndTime     = "16:25";    // Range End Time (e.g. 16:25 = 9:25 AM NY)
-input string   InpTradeStartTime   = "16:30";    // NY Open Bell (e.g. 16:30 = 9:30 AM NY)
-input string   InpTradeEndTime     = "17:15";    // End of Entry Window (e.g. 17:15 = 10:15 AM NY)
+input string   InpRangeStartTime   = "10:00";    // London Session Start (3:00 AM NY)
+input string   InpRangeEndTime     = "16:25";    // London Session End (9:25 AM NY)
+input string   InpTradeStartTime   = "16:30";    // NY Open Bell (9:30 AM NY)
+input string   InpTradeEndTime     = "17:30";    // End of Entry Window (10:30 AM NY)
 
 input group "=== Lookback & Visuals ==="
 input int      InpHistoryDays      = 10;         // Number of days to draw boxes for
