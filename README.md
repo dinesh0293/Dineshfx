@@ -8,7 +8,7 @@ A repository of institutional algorithmic trading strategies for **MetaTrader 5 
 
 | # | Strategy Name | Asset | Timeframe | Strategy Logic | Win Rate | Profit Factor | 13.5-Mo Net Return | Status |
 | :---: | :--- | :---: | :---: | :--- | :---: | :---: | :---: | :---: |
-| **01** | [**London Liquidity Sweep & NY Reversal**](strategies/01_London_Sweep_NY_Reversal/) | **XAUUSD** | **M5** | Institutional Judas Swing / Mean Reversion to 50% Midpoint | **31.3%** | **1.58** | **+70.9 R (+70.9%)** | **Production** |
+| **01** | [**London Liquidity Sweep & NY Reversal**](strategies/01_London_Sweep_NY_Reversal/) | **XAUUSD** | **M5** | Institutional Judas Swing / Mean Reversion to 50% Midpoint + Profit Lock | **38.5%** | **1.62** | **+70.9 R (+70.9%)** | **Production** |
 
 ---
 

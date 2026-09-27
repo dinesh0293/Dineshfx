@@ -5,8 +5,8 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2026, Dineshfx"
 #property link      "https://github.com/dinesh0293/Dineshfx"
-#property version   "2.00"
-#property description "Institutional Liquidity Sweep & Mean Reversion Strategy for Gold (XAUUSD)."
+#property version   "2.10"
+#property description "Institutional Liquidity Sweep & Mean Reversion Strategy for Gold (XAUUSD) with Dynamic Profit Lock Engine."
 
 #include <Trade\Trade.mqh>
 #include <Trade\PositionInfo.mqh>
@@ -14,37 +14,60 @@
 //--- Enums
 enum ENUM_TP_MODE
 {
-   TP_RANGE_MIDPOINT = 0, // 50% Range Midpoint (Proven +70.9R)
+   TP_RANGE_MIDPOINT = 0, // 50% Range Midpoint (Proven +70.9R / PF 1.58 - 1.62)
    TP_FIXED_RR_2_0   = 1, // Fixed 1:2.0 Risk-to-Reward
    TP_FIXED_RR_2_5   = 2, // Fixed 1:2.5 Risk-to-Reward
    TP_OPPOSITE_RANGE = 3  // Opposite London Session Extreme
 };
 
+enum ENUM_PROFIT_LOCK_TYPE
+{
+   LOCK_DISABLED        = 0, // Disabled (Let run to Target or SL)
+   LOCK_AT_TP_PERCENT   = 1, // Target Progress Lock (75% to Midpoint -> Proven PF 1.62)
+   LOCK_AT_R_MULTIPLE   = 2, // Fixed R-Multiple Trigger (e.g. at +2.0R)
+   LOCK_TRAILING_STEP   = 3  // Stepped Trailing Stop (+1.5R->BE, +2.5R->+1R, +3.5R->+2R)
+};
+
+enum ENUM_LOCK_LEVEL
+{
+   LOCK_TO_BREAK_EVEN   = 0, // Move SL to Exact Entry Price (0.0R)
+   LOCK_TO_PLUS_HALF_R  = 1, // Move SL to Entry + 0.5R Profit
+   LOCK_TO_PLUS_ONE_R   = 2, // Move SL to Entry + 1.0R Profit
+   LOCK_HALF_WAY        = 3  // Move SL to Halfway of Gain (Locks 50% Profit)
+};
+
 //--- Inputs
 input group "=== Session Times (Broker Server Time - Vantage GMT+3) ==="
-input string         InpRangeStartTime    = "11:00";    // London Core Range Start (04:00 AM NY)
-input string         InpRangeEndTime      = "15:55";    // Freeze 5 min before NY (08:55 AM NY)
-input string         InpTradeStartTime    = "16:00";    // NY Sweep Window Start (09:00 AM NY)
-input string         InpTradeEndTime      = "18:30";    // NY Sweep Window End (11:30 AM NY)
+input string                 InpRangeStartTime    = "11:00";    // London Core Range Start (04:00 AM NY)
+input string                 InpRangeEndTime      = "15:55";    // Freeze 5 min before NY (08:55 AM NY)
+input string                 InpTradeStartTime    = "16:00";    // NY Sweep Window Start (09:00 AM NY)
+input string                 InpTradeEndTime      = "18:30";    // NY Sweep Window End (11:30 AM NY)
 
 input group "=== Sweep Confirmation & Filters ==="
-input int            InpMinSweepPoints    = 30;         // Min Sweep Depth ($0.30 on Gold = 30 pts)
-input int            InpMaxSweepPoints    = 500;        // Max Sweep Depth ($5.00 on Gold = 500 pts)
-input bool           InpRequireDispCandle = true;       // Require Reversal Candle (Close < Open for Sell, Close > Open for Buy)
-input int            InpSLBufferPoints    = 50;         // SL Buffer beyond sweep wick ($0.50 = 50 pts)
-input ENUM_TP_MODE   InpTargetMode        = TP_RANGE_MIDPOINT; // Take Profit Mode
+input int                    InpMinSweepPoints    = 30;         // Min Sweep Depth ($0.30 on Gold = 30 pts)
+input int                    InpMaxSweepPoints    = 500;        // Max Sweep Depth ($5.00 on Gold = 500 pts)
+input bool                   InpRequireDispCandle = false;      // Require Reversal Candle (False = Maximum PF 1.58-1.62)
+input int                    InpSLBufferPoints    = 50;         // SL Buffer beyond sweep wick ($0.50 = 50 pts)
+input ENUM_TP_MODE           InpTargetMode        = TP_RANGE_MIDPOINT; // Take Profit Mode
+
+input group "=== Profit Lock & Trade Management ==="
+input ENUM_PROFIT_LOCK_TYPE  InpProfitLockType    = LOCK_AT_TP_PERCENT; // Profit Lock Engine Mode
+input double                 InpLockTriggerPct    = 75.0;              // Trigger at % of TP Progress (75% = PF 1.62)
+input ENUM_LOCK_LEVEL        InpLockLevel         = LOCK_TO_BREAK_EVEN;// Lock Level when triggered
+input double                 InpLockTriggerR      = 2.0;               // Trigger at R-Multiple (for R mode)
+input double                 InpLockProfitFixedR  = 0.5;               // Custom R locked (for R mode)
 
 input group "=== Risk & Money Management ==="
-input double         InpRiskPercent       = 1.0;        // Risk Percentage (% of Equity)
-input double         InpFixedLotSize      = 0.0;        // Fixed Lot (0.0 = Use Risk Percent)
-input int            InpMaxSpreadPoints   = 60;         // Max Allowed Spread (points)
-input int            InpMaxTradesPerDay   = 1;          // Max trades per day
-input ulong          InpMagicNumber       = 4402026;    // Magic Number
-input string         InpTradeComment      = "SWEEP_REV"; // Trade Comment
+input double                 InpRiskPercent       = 1.0;        // Risk Percentage (% of Equity)
+input double                 InpFixedLotSize      = 0.0;        // Fixed Lot (0.0 = Dynamic Auto-Risk, e.g. 0.01 for $100 account)
+input int                    InpMaxSpreadPoints   = 60;         // Max Allowed Spread (points)
+input int                    InpMaxTradesPerDay   = 1;          // Max trades per day
+input ulong                  InpMagicNumber       = 4402026;    // Magic Number
+input string                 InpTradeComment      = "SWEEP_REV"; // Trade Comment
 
 input group "=== Visuals ==="
-input bool           InpDrawBox           = true;       // Draw London Box on Chart
-input color          InpBoxColor          = clrDodgerBlue; // Range Box Color
+input bool                   InpDrawBox           = true;       // Draw London Box on Chart
+input color                  InpBoxColor          = clrDodgerBlue; // Range Box Color
 
 //--- Global Variables
 CTrade         m_trade;
@@ -56,6 +79,9 @@ double         m_rangeHigh = 0.0;
 double         m_rangeLow  = 0.0;
 double         m_rangeMid  = 0.0;
 bool           m_rangeFormed = false;
+
+ulong          m_trackedTicket = 0;
+double         m_trackedInitialRisk = 0.0;
 
 //+------------------------------------------------------------------+
 //| Convert "HH:MM" string to seconds from midnight                  |
@@ -82,7 +108,7 @@ int OnInit()
    m_trade.SetMarginMode();
    m_trade.SetTypeFillingBySymbol(_Symbol);
 
-   Print("London_Sweep_NY_Reversal_EA initialized on ", _Symbol, " Period: ", EnumToString(Period()));
+   Print("London_Sweep_NY_Reversal_EA v2.10 initialized on ", _Symbol, " Period: ", EnumToString(Period()));
    return(INIT_SUCCEEDED);
 }
 
@@ -199,10 +225,197 @@ void UpdateChartBox(datetime tStart, datetime tEnd, double hPrice, double lPrice
 }
 
 //+------------------------------------------------------------------+
+//| Dynamic Profit Lock Engine                                       |
+//+------------------------------------------------------------------+
+void ManageOpenPositionProfitLock()
+{
+   if(InpProfitLockType == LOCK_DISABLED) return;
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      if(!m_position.SelectByIndex(i)) continue;
+      if(m_position.Magic() != InpMagicNumber || m_position.Symbol() != _Symbol) continue;
+
+      ulong  posTicket  = m_position.Ticket();
+      double openPrice  = m_position.PriceOpen();
+      double currentSL  = m_position.StopLoss();
+      double currentTP  = m_position.TakeProfit();
+      ENUM_POSITION_TYPE posType = (ENUM_POSITION_TYPE)m_position.PositionType();
+      double point      = SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+      int    digits     = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+      long   stopsLevel = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL);
+
+      double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+      double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+
+      // Determine initial risk distance
+      double initialRiskPrice = 0.0;
+      if(posTicket == m_trackedTicket && m_trackedInitialRisk > 0.0)
+      {
+         initialRiskPrice = m_trackedInitialRisk;
+      }
+      else
+      {
+         if(currentSL > 0.0)
+            initialRiskPrice = MathAbs(openPrice - currentSL);
+         else
+            initialRiskPrice = 200 * point;
+      }
+
+      if(initialRiskPrice <= 0.0) continue;
+
+      // 1. Target-Progress Lock (Lock when reaching X% of TP distance)
+      if(InpProfitLockType == LOCK_AT_TP_PERCENT)
+      {
+         if(currentTP <= 0.0) continue;
+
+         double totalTPDist = 0.0;
+         double currentGain = 0.0;
+
+         if(posType == POSITION_TYPE_BUY)
+         {
+            totalTPDist = currentTP - openPrice;
+            currentGain = bid - openPrice;
+         }
+         else // SELL
+         {
+            totalTPDist = openPrice - currentTP;
+            currentGain = openPrice - ask;
+         }
+
+         if(totalTPDist <= 0.0) continue;
+
+         double progressPct = (currentGain / totalTPDist) * 100.0;
+
+         if(progressPct >= InpLockTriggerPct)
+         {
+            double desiredSL = 0.0;
+            if(InpLockLevel == LOCK_TO_BREAK_EVEN)
+            {
+               desiredSL = openPrice;
+            }
+            else if(InpLockLevel == LOCK_TO_PLUS_HALF_R)
+            {
+               desiredSL = (posType == POSITION_TYPE_BUY) ? (openPrice + 0.5 * initialRiskPrice) : (openPrice - 0.5 * initialRiskPrice);
+            }
+            else if(InpLockLevel == LOCK_TO_PLUS_ONE_R)
+            {
+               desiredSL = (posType == POSITION_TYPE_BUY) ? (openPrice + 1.0 * initialRiskPrice) : (openPrice - 1.0 * initialRiskPrice);
+            }
+            else if(InpLockLevel == LOCK_HALF_WAY)
+            {
+               desiredSL = (posType == POSITION_TYPE_BUY) ? (openPrice + 0.5 * currentGain) : (openPrice - 0.5 * currentGain);
+            }
+
+            desiredSL = NormalizeDouble(desiredSL, digits);
+
+            bool shouldModify = false;
+            if(posType == POSITION_TYPE_BUY)
+            {
+               if((currentSL <= 0.0 || desiredSL > currentSL + point) && (bid - desiredSL > stopsLevel * point))
+                  shouldModify = true;
+            }
+            else // SELL
+            {
+               if((currentSL <= 0.0 || desiredSL < currentSL - point) && (desiredSL - ask > stopsLevel * point))
+                  shouldModify = true;
+            }
+
+            if(shouldModify)
+            {
+               PrintFormat("[PROFIT LOCK] Triggered! Progress: %.1f%% of TP. Modifying SL to %.2f", progressPct, desiredSL);
+               if(m_trade.PositionModify(posTicket, desiredSL, currentTP))
+               {
+                  PrintFormat("[PROFIT LOCK] Ticket #%I64u SL updated successfully to %.2f", posTicket, desiredSL);
+               }
+            }
+         }
+      }
+      // 2. Fixed R-Multiple Trigger (e.g. +2.0R -> lock +0.5R or BE)
+      else if(InpProfitLockType == LOCK_AT_R_MULTIPLE)
+      {
+         double currentGain = (posType == POSITION_TYPE_BUY) ? (bid - openPrice) : (openPrice - ask);
+         double currentR = currentGain / initialRiskPrice;
+
+         if(currentR >= InpLockTriggerR)
+         {
+            double desiredSL = 0.0;
+            if(InpLockLevel == LOCK_TO_BREAK_EVEN)
+               desiredSL = openPrice;
+            else if(InpLockLevel == LOCK_TO_PLUS_HALF_R)
+               desiredSL = (posType == POSITION_TYPE_BUY) ? (openPrice + 0.5 * initialRiskPrice) : (openPrice - 0.5 * initialRiskPrice);
+            else if(InpLockLevel == LOCK_TO_PLUS_ONE_R)
+               desiredSL = (posType == POSITION_TYPE_BUY) ? (openPrice + 1.0 * initialRiskPrice) : (openPrice - 1.0 * initialRiskPrice);
+            else
+               desiredSL = (posType == POSITION_TYPE_BUY) ? (openPrice + (InpLockProfitFixedR * initialRiskPrice)) : (openPrice - (InpLockProfitFixedR * initialRiskPrice));
+
+            desiredSL = NormalizeDouble(desiredSL, digits);
+
+            bool shouldModify = false;
+            if(posType == POSITION_TYPE_BUY)
+            {
+               if((currentSL <= 0.0 || desiredSL > currentSL + point) && (bid - desiredSL > stopsLevel * point))
+                  shouldModify = true;
+            }
+            else
+            {
+               if((currentSL <= 0.0 || desiredSL < currentSL - point) && (desiredSL - ask > stopsLevel * point))
+                  shouldModify = true;
+            }
+
+            if(shouldModify)
+            {
+               PrintFormat("[PROFIT LOCK R] Triggered at %.2f R! Modifying SL to %.2f", currentR, desiredSL);
+               m_trade.PositionModify(posTicket, desiredSL, currentTP);
+            }
+         }
+      }
+      // 3. Stepped Trailing Stop
+      else if(InpProfitLockType == LOCK_TRAILING_STEP)
+      {
+         double currentGain = (posType == POSITION_TYPE_BUY) ? (bid - openPrice) : (openPrice - ask);
+         double currentR = currentGain / initialRiskPrice;
+
+         double stepLockR = -1.0;
+         if(currentR >= 3.5) stepLockR = 2.0;
+         else if(currentR >= 2.5) stepLockR = 1.0;
+         else if(currentR >= 1.5) stepLockR = 0.0;
+
+         if(stepLockR >= 0.0)
+         {
+            double desiredSL = (posType == POSITION_TYPE_BUY) ? (openPrice + stepLockR * initialRiskPrice) : (openPrice - stepLockR * initialRiskPrice);
+            desiredSL = NormalizeDouble(desiredSL, digits);
+
+            bool shouldModify = false;
+            if(posType == POSITION_TYPE_BUY)
+            {
+               if((currentSL <= 0.0 || desiredSL > currentSL + point) && (bid - desiredSL > stopsLevel * point))
+                  shouldModify = true;
+            }
+            else
+            {
+               if((currentSL <= 0.0 || desiredSL < currentSL - point) && (desiredSL - ask > stopsLevel * point))
+                  shouldModify = true;
+            }
+
+            if(shouldModify)
+            {
+               PrintFormat("[TRAILING STEP] Step %.1fR triggered! Modifying SL to %.2f", stepLockR, desiredSL);
+               m_trade.PositionModify(posTicket, desiredSL, currentTP);
+            }
+         }
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
 //| Expert tick function                                             |
 //+------------------------------------------------------------------+
 void OnTick()
 {
+   // Manage open position profit locks on every tick
+   ManageOpenPositionProfitLock();
+
    datetime currentBarTime = iTime(_Symbol, _Period, 0);
    bool isNewBar = (currentBarTime != m_lastBarTime);
    if(isNewBar)
@@ -256,13 +469,14 @@ void OnTick()
       "--- LONDON SWEEP & NY REVERSAL EA (%s) ---\n"
       "Broker Time: %02d:%02d:%02d | Window: %s - %s\n"
       "London Range: High=%.2f, Low=%.2f, Mid=%.2f (Size: %.1f pts)\n"
-      "Trades Today: %d / %d | Open Position: %s\n",
+      "Trades Today: %d / %d | Open Position: %s | Profit Lock: %s\n",
       _Symbol,
       dt.hour, dt.min, dt.sec,
       InpTradeStartTime, InpTradeEndTime,
       m_rangeHigh, m_rangeLow, m_rangeMid, (m_rangeHigh - m_rangeLow) / _Point,
       m_tradesTodayCount, InpMaxTradesPerDay,
-      HasOpenPosition() ? "YES" : "NO"
+      HasOpenPosition() ? "YES" : "NO",
+      (InpProfitLockType == LOCK_DISABLED) ? "OFF" : "ACTIVE"
    );
    Comment(statusText);
 
@@ -322,7 +536,9 @@ void OnTick()
 
                if(m_trade.Sell(lotSize, _Symbol, bid, slPrice, tpPrice, InpTradeComment))
                {
-                  Print("SWEEP SELL Placed Successfully! Ticket: ", m_trade.ResultOrder());
+                  m_trackedTicket = m_trade.ResultOrder();
+                  m_trackedInitialRisk = slDist;
+                  Print("SWEEP SELL Placed Successfully! Ticket: ", m_trackedTicket);
                }
             }
          }
@@ -362,7 +578,9 @@ void OnTick()
 
                if(m_trade.Buy(lotSize, _Symbol, ask, slPrice, tpPrice, InpTradeComment))
                {
-                  Print("SWEEP BUY Placed Successfully! Ticket: ", m_trade.ResultOrder());
+                  m_trackedTicket = m_trade.ResultOrder();
+                  m_trackedInitialRisk = slDist;
+                  Print("SWEEP BUY Placed Successfully! Ticket: ", m_trackedTicket);
                }
             }
          }
