@@ -25,7 +25,7 @@
 
 //--- Input Parameters
 input group "=== Session Times (Broker Server Time) ==="
-input string   InpRangeStartTime   = "10:00";    // London Session Start (3:00 AM NY)
+input string   InpRangeStartTime   = "11:00";    // London Core Session Start (4:00 AM NY)
 input string   InpRangeEndTime     = "16:25";    // London Session End (9:25 AM NY)
 input string   InpTradeStartTime   = "16:30";    // NY Open Bell (9:30 AM NY)
 input string   InpTradeEndTime     = "17:30";    // End of Entry Window (10:30 AM NY)
