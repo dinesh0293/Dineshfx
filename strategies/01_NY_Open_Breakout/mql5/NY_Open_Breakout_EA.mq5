@@ -318,7 +318,7 @@ void OnTick()
    int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
 
    //--- BULLISH BREAKOUT
-   if(close1 > m_rangeHigh && open1 <= m_rangeHigh)
+   if(close1 > m_rangeHigh)
    {
       double slPrice = 0.0;
       if(InpStopLossMode == SL_BREAKOUT_CANDLE)
@@ -349,7 +349,8 @@ void OnTick()
       }
    }
    //--- BEARISH BREAKOUT
-   else if(close1 < m_rangeLow && open1 >= m_rangeLow)
+   else if(close1 < m_rangeLow)
+
    {
       double slPrice = 0.0;
       if(InpStopLossMode == SL_BREAKOUT_CANDLE)

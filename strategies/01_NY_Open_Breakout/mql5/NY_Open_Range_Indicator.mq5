@@ -199,7 +199,7 @@ int OnCalculate(const int rates_total,
                if(!breakoutTriggered)
                {
                   // Buy Breakout confirmation (candle closed above range high)
-                  if(close[k] > dayRangeHigh && open[k] <= dayRangeHigh)
+                  if(close[k] > dayRangeHigh)
                   {
                      BuyBuffer[k] = low[k] - 20 * _Point;
                      breakoutTriggered = true;
@@ -215,7 +215,7 @@ int OnCalculate(const int rates_total,
                      }
                   }
                   // Sell Breakout confirmation (candle closed below range low)
-                  else if(close[k] < dayRangeLow && open[k] >= dayRangeLow)
+                  else if(close[k] < dayRangeLow)
                   {
                      SellBuffer[k] = high[k] + 20 * _Point;
                      breakoutTriggered = true;
