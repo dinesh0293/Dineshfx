@@ -5,12 +5,12 @@ indicator("NY Open (9:30 AM EST) Breakout Strategy [Dineshfx]", shorttitle="NY O
 // INPUTS & SETTINGS
 //==============================================================================
 grp_sess = "Session Configuration (New York Time)"
-i_sess_preset = input.string("Pre-Market (08:00 - 09:30)", "Earlier Session Range", options=["Pre-Market (08:00 - 09:30)", "Asian + London (00:00 - 09:30)", "London (03:00 - 09:30)"], group=grp_sess, tooltip="Select which earlier session high/low to mark as the breakout box")
+i_sess_preset = input.string("London (03:00 - 09:30)", "Earlier Session Range", options=["London (03:00 - 09:30)", "Asian + London (00:00 - 09:30)", "Pre-Market Only (08:00 - 09:30)"], group=grp_sess, tooltip="Select which earlier session high/low to mark as the breakout box. Default is the full London session (03:00 - 09:30 EST).")
 i_trade_sess  = input.session("0930-1030:23456", "NY Open Trade Window", group=grp_sess, tooltip="Entry window starting right at 9:30 AM NYSE open")
 i_tz          = input.string("America/New_York", "Timezone", group=grp_sess)
 
 grp_mark = "High / Low Price Markings"
-i_show_hl_lines = input.bool(true, "Show High & Low Price Level Lines", group=grp_mark)
+i_show_hl_lines = input.bool(true, "Show High & Low Level Lines", group=grp_mark)
 i_show_hl_labels = input.bool(true, "Show High & Low Price Tags", group=grp_mark)
 i_show_mid_line  = input.bool(true, "Show 50% Midpoint Line", group=grp_mark)
 
@@ -33,7 +33,8 @@ i_show_dash   = input.bool(true, "Show Status Dashboard Table", group=grp_vis)
 //==============================================================================
 // SESSION & TIME DETECTION
 //==============================================================================
-string range_sess_str = i_sess_preset == "Asian + London (00:00 - 09:30)" ? "0000-0930:23456" : (i_sess_preset == "London (03:00 - 09:30)" ? "0300-0930:23456" : "0800-0930:23456")
+string range_sess_str = i_sess_preset == "Asian + London (00:00 - 09:30)" ? "0000-0930:23456" : (i_sess_preset == "Pre-Market Only (08:00 - 09:30)" ? "0800-0930:23456" : "0300-0930:23456")
+string sess_short_title = i_sess_preset == "Asian + London (00:00 - 09:30)" ? "ASIA+LDN" : (i_sess_preset == "Pre-Market Only (08:00 - 09:30)" ? "PRE-NY" : "LONDON")
 
 in_range_session = not na(time(timeframe.period, range_sess_str, i_tz))
 in_trade_session = not na(time(timeframe.period, i_trade_sess, i_tz))
@@ -66,7 +67,7 @@ if new_range_session
     range_start_time := time
     trade_taken_today := false
     
-    // Create new range box anchored in time
+    // Create new range box covering the earlier session
     range_box := box.new(left=time, top=range_high, right=time_close, bottom=range_low,
                          xloc=xloc.bar_time, bgcolor=i_box_color, border_color=i_box_border,
                          border_style=line.style_solid, border_width=1)
@@ -80,10 +81,10 @@ if new_range_session
 
     // Create High / Low price text labels
     if i_show_hl_labels
-        high_lbl := label.new(time_close, range_high, "HIGH: " + str.tostring(range_high, "#.##"), xloc=xloc.bar_time, color=i_high_color, textcolor=color.black, style=label.style_label_left, size=size.small)
-        low_lbl  := label.new(time_close, range_low,  "LOW: "  + str.tostring(range_low, "#.##"),  xloc=xloc.bar_time, color=i_low_color,  textcolor=color.white, style=label.style_label_left, size=size.small)
+        high_lbl := label.new(time_close, range_high, sess_short_title + " HIGH: " + str.tostring(range_high, "#.##"), xloc=xloc.bar_time, color=i_high_color, textcolor=color.black, style=label.style_label_left, size=size.small)
+        low_lbl  := label.new(time_close, range_low,  sess_short_title + " LOW: "  + str.tostring(range_low, "#.##"),  xloc=xloc.bar_time, color=i_low_color,  textcolor=color.white, style=label.style_label_left, size=size.small)
 
-// Update while forming the range box
+// Update while forming the earlier session range box
 if in_range_session and not na(range_box)
     range_high := math.max(range_high, high)
     range_low  := math.min(range_low, low)
@@ -92,7 +93,7 @@ if in_range_session and not na(range_box)
     box.set_top(range_box, range_high)
     box.set_bottom(range_box, range_low)
     box.set_right(range_box, time_close)
-    box.set_text(range_box, "  PRE-MARKET RANGE\n  High: " + str.tostring(range_high, "#.##") + "\n  Low:  " + str.tostring(range_low, "#.##"))
+    box.set_text(range_box, "  " + sess_short_title + " RANGE\n  High: " + str.tostring(range_high, "#.##") + "\n  Low:  " + str.tostring(range_low, "#.##"))
     box.set_text_color(range_box, color.white)
     box.set_text_size(range_box, size.small)
     box.set_text_halign(range_box, text.align_left)
@@ -114,12 +115,12 @@ if in_range_session and not na(range_box)
 
     if i_show_hl_labels and not na(high_lbl) and not na(low_lbl)
         label.set_xy(high_lbl, time_close, range_high)
-        label.set_text(high_lbl, "HIGH: " + str.tostring(range_high, "#.##"))
+        label.set_text(high_lbl, sess_short_title + " HIGH: " + str.tostring(range_high, "#.##"))
 
         label.set_xy(low_lbl, time_close, range_low)
-        label.set_text(low_lbl, "LOW: " + str.tostring(range_low, "#.##"))
+        label.set_text(low_lbl, sess_short_title + " LOW: " + str.tostring(range_low, "#.##"))
 
-// Extend High & Low levels slightly into the trade window for visual reference
+// Extend High & Low levels into the New York trade window for visual reference
 var bool session_just_ended = false
 session_just_ended := not in_range_session and in_range_session[1]
 if session_just_ended and i_show_hl_lines and not na(high_line) and not na(low_line)
@@ -144,7 +145,7 @@ var string last_signal_str = "None"
 
 // Evaluate breakout on confirmed bar close during the trade window
 if in_trade_session and not trade_taken_today and not na(range_high) and not na(range_low) and barstate.isconfirmed
-    // Bullish Breakout: First confirmed candle closing strictly above range high
+    // Bullish Breakout: First confirmed candle closing strictly above earlier session high
     if close > range_high
         buy_signal := true
         trade_taken_today := true
@@ -179,7 +180,7 @@ if in_trade_session and not trade_taken_today and not na(range_high) and not na(
             line.new(time, active_tp, proj_time, active_tp, xloc=xloc.bar_time, color=color.green, width=2, style=line.style_dashed)
             label.new(proj_time, active_tp, "TP (1:" + str.tostring(i_rr) + "): " + str.tostring(active_tp, "#.##"), xloc=xloc.bar_time, color=color.green, textcolor=color.white, style=label.style_label_left, size=size.small)
 
-    // Bearish Breakout: First confirmed candle closing strictly below range low
+    // Bearish Breakout: First confirmed candle closing strictly below earlier session low
     else if close < range_low
         sell_signal := true
         trade_taken_today := true
@@ -228,16 +229,16 @@ alertcondition(sell_signal, title="NY Open SELL Breakout", message="NY Open SELL
 var table dash = table.new(position.top_right, 2, 5, bgcolor=color.new(color.black, 20), border_color=color.gray, border_width=1)
 
 if barstate.islast and i_show_dash
-    string sess_status = in_range_session ? "Forming Range Box" : (in_trade_session ? "NY Trade Window Active" : "Outside NY Session")
+    string sess_status = in_range_session ? ("Forming " + sess_short_title + " Box") : (in_trade_session ? "NY Trade Window Active" : "Outside NY Session")
     color status_color = in_trade_session ? color.green : (in_range_session ? color.orange : color.gray)
     
     table.cell(dash, 0, 0, "NY Breakout", bgcolor=color.navy, text_color=color.white, text_size=size.small)
     table.cell(dash, 1, 0, sess_status, bgcolor=status_color, text_color=color.white, text_size=size.small)
 
-    table.cell(dash, 0, 1, "Range High", text_color=color.aqua, text_size=size.small)
+    table.cell(dash, 0, 1, sess_short_title + " High", text_color=color.aqua, text_size=size.small)
     table.cell(dash, 1, 1, str.tostring(range_high, "#.##"), text_color=color.white, text_size=size.small)
 
-    table.cell(dash, 0, 2, "Range Low", text_color=color.orange, text_size=size.small)
+    table.cell(dash, 0, 2, sess_short_title + " Low", text_color=color.orange, text_size=size.small)
     table.cell(dash, 1, 2, str.tostring(range_low, "#.##"), text_color=color.white, text_size=size.small)
 
     table.cell(dash, 0, 3, "Last Signal", text_color=color.aqua, text_size=size.small)
