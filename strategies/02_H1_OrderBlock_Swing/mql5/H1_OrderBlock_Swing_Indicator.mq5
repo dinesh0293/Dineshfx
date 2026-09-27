@@ -97,6 +97,24 @@ void DrawOrderBlock(string name, datetime tStart, datetime tEnd, double top, dou
 }
 
 //+------------------------------------------------------------------+
+//| Draw or Update an Order Block Text Label (OB Name + SL Price)    |
+//+------------------------------------------------------------------+
+void DrawOrderBlockLabel(string name, datetime tStart, double price, string text, color clr)
+{
+   if(ObjectFind(0, name) < 0)
+   {
+      ObjectCreate(0, name, OBJ_TEXT, 0, tStart, price);
+      ObjectSetString(0, name, OBJPROP_TEXT, text);
+      ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+      ObjectSetString(0, name, OBJPROP_FONT, "Segoe UI Bold");
+      ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 9);
+      ObjectSetInteger(0, name, OBJPROP_ANCHOR, ANCHOR_LEFT_LOWER);
+      ObjectSetInteger(0, name, OBJPROP_BACK, false);
+      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+   }
+}
+
+//+------------------------------------------------------------------+
 //| Custom indicator iteration function                              |
 //+------------------------------------------------------------------+
 int OnCalculate(const int rates_total,
@@ -175,6 +193,11 @@ int OnCalculate(const int rates_total,
 
                string obName = StringFormat("H1_OB_SELL_%s", TimeToString(tStart, TIME_DATE|TIME_MINUTES));
                DrawOrderBlock(obName, tStart, tEnd, obTop, obBottom, InpColorBearishOB);
+
+               double slPrice = pivotHigh + (200 * point);
+               string labelText = StringFormat("H1 SELL OB | SL: %.2f", slPrice);
+               DrawOrderBlockLabel(obName + "_TXT", tStart, pivotHigh + (30 * point), labelText, clrRed);
+
                BufferBearish[pIdx] = pivotHigh + (50 * point);
             }
          }
@@ -222,6 +245,11 @@ int OnCalculate(const int rates_total,
 
                string obName = StringFormat("H1_OB_BUY_%s", TimeToString(tStart, TIME_DATE|TIME_MINUTES));
                DrawOrderBlock(obName, tStart, tEnd, obTop, obBottom, InpColorBullishOB);
+
+               double slPrice = pivotLow - (200 * point);
+               string labelText = StringFormat("H1 BUY OB | SL: %.2f", slPrice);
+               DrawOrderBlockLabel(obName + "_TXT", tStart, pivotLow - (30 * point), labelText, clrForestGreen);
+
                BufferBullish[pIdx] = pivotLow - (50 * point);
             }
          }
