@@ -75,14 +75,34 @@ We tested **9 different profit locking and trade management models** across 80,0
    - **One-Click Chart Pause Button (`InpShowNewsButton = true`)**: Directly on your MT5 chart, click the green button to turn it into red `"⚠️ NEWS PAUSED"`, instantly pausing all automated execution.
    - **Spread Guard (`InpMaxSpreadPoints = 60`)**: Automatically rejects entries if spread widens beyond 60 points during news spikes.
 
+## Sizing & Risk Analysis: 0.01 vs 0.02 Lot ($100 Account)
+
+| Metric | 0.01 Fixed Lot (Recommended) | 0.02 Fixed Lot | Key Finding |
+| :--- | :---: | :---: | :--- |
+| **Profit Factor (PF)** | **1.48** (1.62 R-basis) | **1.48** (1.62 R-basis) | Identical ratio |
+| **Win Rate** | **27.9%** (+ 10.6% Break-Even) | **27.9%** (+ 10.6% Break-Even) | 50 Wins, 19 BE, 110 Losses |
+| **Max Losing Streak** | **10 consecutive losses** | **10 consecutive losses** | Standard market variance |
+| **Average Win** | **+$14.70** | **+$29.40** | 0.02 makes 2x |
+| **Average Loss** | **-$4.53** | **-$9.06** | 0.02 loses 2x |
+| **Lowest Equity Reached** | **$17.65 (SURVIVED ✅)** | **$-64.69 (ACCOUNT BLOWN ❌)** | **0.02 lot triggers broker stop-out liquidation!** |
+| **Net Profit (13.5 Mos)** | **+$236.85 (+236.9%)** | +$473.70 (Theoretical only) | 0.01 lot safely grew $100 $\rightarrow$ **$336.85** |
+| **Account Survival** | **100% Survived** | **Failed (Margin Call)** | Never use 0.02 lot on a $100 balance |
+
+### Growth Timeline: When Does the Account Reach $200?
+- **Starting Capital**: $100.00 (Aug 12, 2025)
+- **Account Reaches $200 Milestone**: **February 25, 2026** (Trade #91 of 179)
+- **Time Elapsed to Double Account**: **197 calendar days (~6.5 months)**
+- **Scaling Action**: Once balance passes **$200.00**, switch `InpFixedLotSize = 0.02` to safely double profit velocity.
+
 ---
 
-## Recommendations for a $100 Account
+## VPS vs Home PC Economics ($100 Account)
 
-- **Lot Size**: Use **`InpFixedLotSize = 0.01`**. On a $100 account, 0.01 is the broker's minimum allowable lot size.
-- **Dollar Risk per Trade**: With an average Stop Loss of $1.50 - $2.50 on Gold, a 0.01 lot trade risks **$1.50 - $2.50 per trade (1.5% - 2.5% account risk)**, which is well within safe drawdown limits.
-- **Profit Potential**: Average winning target (Midpoint) is $6.00 - $12.00, yielding **+$6.00 to +$12.00 profit per win (+6% to +12% account gain)**.
-- **Max Trades Per Day**: Keep `InpMaxTradesPerDay = 1` to prevent over-trading.
+- **The Problem**: A $15–$20/month VPS costs $200–$270 over 13.5 months, completely wiping out the +$236.85 trading profit!
+- **The Solution**: This EA **does NOT need 24/7 hosting**.
+  - It only trades during the **New York Opening Window (09:00 - 11:30 AM EST / 16:00 - 18:30 MT5 / 6:30 - 9:00 PM IST)**.
+  - Simply open MT5 on your home laptop/PC during this 2.5-hour window (**$0 cost**).
+  - You keep **100% of the $236.85 profit**. Only invest in a paid VPS once account balance reaches $500+.
 
 ---
 
