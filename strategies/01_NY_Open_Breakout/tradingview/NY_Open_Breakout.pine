@@ -5,8 +5,8 @@ indicator("NY Open (9:30 AM EST) Breakout Strategy [Dineshfx]", shorttitle="NY O
 // INPUTS & SETTINGS
 //==============================================================================
 grp_sess = "Session Configuration (New York Time)"
-i_range_sess  = input.session("0800-0925:23456", "Pre-Market Range Session", group=grp_sess, tooltip="Range formation window (8:00 AM - 9:25 AM EST)")
-i_trade_sess  = input.session("0930-1015:23456", "NY Open Trade Window", group=grp_sess, tooltip="Entry window starting right at 9:30 AM NYSE open")
+i_range_sess  = input.session("0800-0930:23456", "Pre-Market Range Session", group=grp_sess, tooltip="Range formation window up to NYSE open (8:00 AM - 9:30 AM EST)")
+i_trade_sess  = input.session("0930-1030:23456", "NY Open Trade Window", group=grp_sess, tooltip="Entry window starting right at 9:30 AM NYSE open")
 i_tz          = input.string("America/New_York", "Timezone", group=grp_sess)
 
 grp_risk = "Trade Management & Targets"
@@ -23,7 +23,7 @@ i_sell_color  = input.color(color.red, "Sell Signal Color", group=grp_vis)
 i_show_dash   = input.bool(true, "Show Status Dashboard Table", group=grp_vis)
 
 //==============================================================================
-// SESSION & TIME DETECTION (Time-Anchored)
+// SESSION & TIME DETECTION
 //==============================================================================
 in_range_session = not na(time(timeframe.period, i_range_sess, i_tz))
 in_trade_session = not na(time(timeframe.period, i_trade_sess, i_tz))
@@ -32,7 +32,7 @@ in_trade_session = not na(time(timeframe.period, i_trade_sess, i_tz))
 t_day = dayofmonth(time, i_tz)
 var int last_session_day = -1
 
-// Triggers exactly on the first bar of the range session for each day
+// Triggers on the first bar of the range session each day
 new_range_session = in_range_session and (t_day != last_session_day)
 
 //==============================================================================
@@ -48,7 +48,6 @@ if new_range_session
     range_high := high
     range_low  := low
     trade_taken_today := false
-    // Using xloc.bar_time locks box to exact chart timestamps, never drifting on zoom/pan
     range_box := box.new(left=time, top=range_high, right=time_close, bottom=range_low,
                          xloc=xloc.bar_time, bgcolor=i_box_color, border_color=i_box_border,
                          border_style=line.style_solid, border_width=1)
@@ -61,7 +60,7 @@ if in_range_session and not na(range_box)
     box.set_right(range_box, time_close)
 
 //==============================================================================
-// BREAKOUT DETECTION & SIGNALS
+// BREAKOUT DETECTION & SIGNALS (Works seamlessly on 5m, 15m, 1m)
 //==============================================================================
 buy_signal  = false
 sell_signal = false
@@ -70,10 +69,10 @@ var float active_entry = na
 var float active_sl    = na
 var float active_tp    = na
 
-// Evaluate breakout only on confirmed bar close during the trade window
+// Evaluate breakout on confirmed bar close during the trade window
 if in_trade_session and not trade_taken_today and not na(range_high) and not na(range_low) and barstate.isconfirmed
-    // Bullish Breakout: Candle closes cleanly above range high
-    if close > range_high and open <= range_high
+    // Bullish Breakout: First confirmed candle closing strictly above range high
+    if close > range_high
         buy_signal := true
         trade_taken_today := true
         active_entry := close
@@ -92,15 +91,15 @@ if in_trade_session and not trade_taken_today and not na(range_high) and not na(
 
         // Draw SL / TP Visual Levels locked in time
         if i_draw_levels
-            int proj_time = time + (12 * 5 * 60 * 1000) // Project 1 hour forward
+            int proj_time = time + (12 * 5 * 60 * 1000) // Project forward
             line.new(time, active_sl, proj_time, active_sl, xloc=xloc.bar_time, color=color.red, width=2, style=line.style_dashed)
             label.new(proj_time, active_sl, "SL: " + str.tostring(active_sl, "#.##"), xloc=xloc.bar_time, color=color.red, textcolor=color.white, style=label.style_label_left, size=size.small)
             
             line.new(time, active_tp, proj_time, active_tp, xloc=xloc.bar_time, color=color.green, width=2, style=line.style_dashed)
             label.new(proj_time, active_tp, "TP (1:" + str.tostring(i_rr) + "): " + str.tostring(active_tp, "#.##"), xloc=xloc.bar_time, color=color.green, textcolor=color.white, style=label.style_label_left, size=size.small)
 
-    // Bearish Breakout: Candle closes cleanly below range low
-    else if close < range_low and open >= range_low
+    // Bearish Breakout: First confirmed candle closing strictly below range low
+    else if close < range_low
         sell_signal := true
         trade_taken_today := true
         active_entry := close
@@ -119,7 +118,7 @@ if in_trade_session and not trade_taken_today and not na(range_high) and not na(
 
         // Draw SL / TP Visual Levels locked in time
         if i_draw_levels
-            int proj_time = time + (12 * 5 * 60 * 1000) // Project 1 hour forward
+            int proj_time = time + (12 * 5 * 60 * 1000) // Project forward
             line.new(time, active_sl, proj_time, active_sl, xloc=xloc.bar_time, color=color.red, width=2, style=line.style_dashed)
             label.new(proj_time, active_sl, "SL: " + str.tostring(active_sl, "#.##"), xloc=xloc.bar_time, color=color.red, textcolor=color.white, style=label.style_label_left, size=size.small)
             
