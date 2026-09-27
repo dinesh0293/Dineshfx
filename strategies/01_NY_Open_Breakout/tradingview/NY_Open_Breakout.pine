@@ -5,9 +5,14 @@ indicator("NY Open (9:30 AM EST) Breakout Strategy [Dineshfx]", shorttitle="NY O
 // INPUTS & SETTINGS
 //==============================================================================
 grp_sess = "Session Configuration (New York Time)"
-i_range_sess  = input.session("0800-0930:23456", "Pre-Market Range Session", group=grp_sess, tooltip="Range formation window up to NYSE open (8:00 AM - 9:30 AM EST)")
+i_sess_preset = input.string("Pre-Market (08:00 - 09:30)", "Earlier Session Range", options=["Pre-Market (08:00 - 09:30)", "Asian + London (00:00 - 09:30)", "London (03:00 - 09:30)"], group=grp_sess, tooltip="Select which earlier session high/low to mark as the breakout box")
 i_trade_sess  = input.session("0930-1030:23456", "NY Open Trade Window", group=grp_sess, tooltip="Entry window starting right at 9:30 AM NYSE open")
 i_tz          = input.string("America/New_York", "Timezone", group=grp_sess)
+
+grp_mark = "High / Low Price Markings"
+i_show_hl_lines = input.bool(true, "Show High & Low Price Level Lines", group=grp_mark)
+i_show_hl_labels = input.bool(true, "Show High & Low Price Tags", group=grp_mark)
+i_show_mid_line  = input.bool(true, "Show 50% Midpoint Line", group=grp_mark)
 
 grp_risk = "Trade Management & Targets"
 i_sl_mode     = input.string("Breakout Candle", "Stop Loss Mode", options=["Breakout Candle", "Box Midpoint", "Opposite Box Edge"], group=grp_risk)
@@ -18,6 +23,8 @@ i_draw_levels = input.bool(true, "Draw Entry, SL & TP Projected Levels", group=g
 grp_vis = "Visual Customization"
 i_box_color   = input.color(color.new(#2196F3, 85), "Box Fill Color", group=grp_vis)
 i_box_border  = input.color(#2196F3, "Box Border Color", group=grp_vis)
+i_high_color  = input.color(color.aqua, "Range High Color", group=grp_vis)
+i_low_color   = input.color(color.orange, "Range Low Color", group=grp_vis)
 i_entry_color = input.color(#2196F3, "Entry Line Color", group=grp_vis)
 i_buy_color   = input.color(color.green, "Buy Signal Color", group=grp_vis)
 i_sell_color  = input.color(color.red, "Sell Signal Color", group=grp_vis)
@@ -26,7 +33,9 @@ i_show_dash   = input.bool(true, "Show Status Dashboard Table", group=grp_vis)
 //==============================================================================
 // SESSION & TIME DETECTION
 //==============================================================================
-in_range_session = not na(time(timeframe.period, i_range_sess, i_tz))
+string range_sess_str = i_sess_preset == "Asian + London (00:00 - 09:30)" ? "0000-0930:23456" : (i_sess_preset == "London (03:00 - 09:30)" ? "0300-0930:23456" : "0800-0930:23456")
+
+in_range_session = not na(time(timeframe.period, range_sess_str, i_tz))
 in_trade_session = not na(time(timeframe.period, i_trade_sess, i_tz))
 
 // Current New York Calendar Day
@@ -37,28 +46,90 @@ var int last_session_day = -1
 new_range_session = in_range_session and (t_day != last_session_day)
 
 //==============================================================================
-// RANGE FORMATION LOGIC (Glued to time with xloc.bar_time)
+// RANGE FORMATION & PRICE MARKINGS (Locked to exact chart time and price)
 //==============================================================================
 var float range_high = na
 var float range_low  = na
+var int   range_start_time = na
 var box   range_box  = na
+var line  high_line  = na
+var line  low_line   = na
+var line  mid_line   = na
+var label high_lbl   = na
+var label low_lbl    = na
 var bool  trade_taken_today = false
 
 if new_range_session
     last_session_day := t_day
     range_high := high
     range_low  := low
+    range_start_time := time
     trade_taken_today := false
+    
+    // Create new range box anchored in time
     range_box := box.new(left=time, top=range_high, right=time_close, bottom=range_low,
                          xloc=xloc.bar_time, bgcolor=i_box_color, border_color=i_box_border,
                          border_style=line.style_solid, border_width=1)
+    
+    // Create High / Low / Mid lines
+    if i_show_hl_lines
+        high_line := line.new(time, range_high, time_close, range_high, xloc=xloc.bar_time, color=i_high_color, width=1, style=line.style_solid)
+        low_line  := line.new(time, range_low,  time_close, range_low,  xloc=xloc.bar_time, color=i_low_color,  width=1, style=line.style_solid)
+        if i_show_mid_line
+            mid_line := line.new(time, (range_high + range_low) / 2.0, time_close, (range_high + range_low) / 2.0, xloc=xloc.bar_time, color=color.gray, width=1, style=line.style_dotted)
 
+    // Create High / Low price text labels
+    if i_show_hl_labels
+        high_lbl := label.new(time_close, range_high, "HIGH: " + str.tostring(range_high, "#.##"), xloc=xloc.bar_time, color=i_high_color, textcolor=color.black, style=label.style_label_left, size=size.small)
+        low_lbl  := label.new(time_close, range_low,  "LOW: "  + str.tostring(range_low, "#.##"),  xloc=xloc.bar_time, color=i_low_color,  textcolor=color.white, style=label.style_label_left, size=size.small)
+
+// Update while forming the range box
 if in_range_session and not na(range_box)
     range_high := math.max(range_high, high)
     range_low  := math.min(range_low, low)
+    float range_mid = (range_high + range_low) / 2.0
+    
     box.set_top(range_box, range_high)
     box.set_bottom(range_box, range_low)
     box.set_right(range_box, time_close)
+    box.set_text(range_box, "  PRE-MARKET RANGE\n  High: " + str.tostring(range_high, "#.##") + "\n  Low:  " + str.tostring(range_low, "#.##"))
+    box.set_text_color(range_box, color.white)
+    box.set_text_size(range_box, size.small)
+    box.set_text_halign(range_box, text.halign_left)
+    box.set_text_valign(range_box, text.valign_top)
+
+    if i_show_hl_lines and not na(high_line) and not na(low_line)
+        line.set_y1(high_line, range_high)
+        line.set_y2(high_line, range_high)
+        line.set_x2(high_line, time_close)
+
+        line.set_y1(low_line, range_low)
+        line.set_y2(low_line, range_low)
+        line.set_x2(low_line, time_close)
+
+        if not na(mid_line)
+            line.set_y1(mid_line, range_mid)
+            line.set_y2(mid_line, range_mid)
+            line.set_x2(mid_line, time_close)
+
+    if i_show_hl_labels and not na(high_lbl) and not na(low_lbl)
+        label.set_xy(high_lbl, time_close, range_high)
+        label.set_text(high_lbl, "HIGH: " + str.tostring(range_high, "#.##"))
+
+        label.set_xy(low_lbl, time_close, range_low)
+        label.set_text(low_lbl, "LOW: " + str.tostring(range_low, "#.##"))
+
+// Extend High & Low levels slightly into the trade window for visual reference
+var bool session_just_ended = false
+session_just_ended := not in_range_session and in_range_session[1]
+if session_just_ended and i_show_hl_lines and not na(high_line) and not na(low_line)
+    int ext_time = time + (12 * 5 * 60 * 1000) // Extend 1 hour into NY session
+    line.set_x2(high_line, ext_time)
+    line.set_x2(low_line, ext_time)
+    if not na(high_lbl)
+        label.set_x(high_lbl, ext_time)
+    if not na(low_lbl)
+        label.set_x(low_lbl, ext_time)
 
 //==============================================================================
 // BREAKOUT DETECTION & SIGNALS
@@ -157,7 +228,7 @@ alertcondition(sell_signal, title="NY Open SELL Breakout", message="NY Open SELL
 var table dash = table.new(position.top_right, 2, 5, bgcolor=color.new(color.black, 20), border_color=color.gray, border_width=1)
 
 if barstate.islast and i_show_dash
-    string sess_status = in_range_session ? "Forming Pre-Market Box" : (in_trade_session ? "NY Trade Window Active" : "Outside NY Session")
+    string sess_status = in_range_session ? "Forming Range Box" : (in_trade_session ? "NY Trade Window Active" : "Outside NY Session")
     color status_color = in_trade_session ? color.green : (in_range_session ? color.orange : color.gray)
     
     table.cell(dash, 0, 0, "NY Breakout", bgcolor=color.navy, text_color=color.white, text_size=size.small)
