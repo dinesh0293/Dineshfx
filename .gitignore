@@ -1,0 +1,11 @@
+# Byte-compiled / binary files
+*.log
+*.tmp
+*.bak
+*.dat
+*.ini
+
+# MetaTrader temporary files
+.history/
+.vscode/
+.idea/
