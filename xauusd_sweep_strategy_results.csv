@@ -1,0 +1,8 @@
+Strategy Model,Target R:R,Total Trades,Wins,Losses,Win Rate (%),Profit Factor,Net Return (R),Max Drawdown (R),Return on $10k (1% risk)
+Single-Candle Sweep (Wick Rejection),1:1.5,233,85,148,36.48%,0.85,-21.7 R,-31.5 R,"$-2,167 (-21.7%)"
+Single-Candle Sweep (Wick Rejection),1:2.0,233,71,162,30.47%,0.86,-23.4 R,-28.2 R,"$-2,339 (-23.4%)"
+Single-Candle Sweep (Wick Rejection),1:2.5,233,66,167,28.33%,0.94,-10.4 R,-23.5 R,"$-1,039 (-10.4%)"
+Confirmed Fakeout (Close out -> Close back in),1:1.5,182,73,109,40.11%,0.98,-2.4 R,-13.2 R,$-244 (-2.4%)
+Confirmed Fakeout (Close out -> Close back in),1:2.0,182,64,118,35.16%,1.02,+1.9 R,-16.5 R,$+185 (+1.9%)
+Confirmed Fakeout (Close out -> Close back in),1:2.5,182,59,123,32.42%,1.07,+8.7 R,-15.4 R,$+869 (+8.7%)
+Sweep Targeting Range Midpoint (50%),50% Midpoint,233,78,155,33.48%,1.40,+61.4 R,-16.8 R,"$+6,139 (+61.4%)"

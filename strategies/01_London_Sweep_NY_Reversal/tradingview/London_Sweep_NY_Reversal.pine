@@ -1,0 +1,249 @@
+//@version=6
+indicator("London Liquidity Sweep & NY Reversal [Dineshfx]", shorttitle="London Sweep Reversal [Dineshfx]", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+
+//==============================================================================
+// INPUTS & CONFIGURATION
+//==============================================================================
+grp_sess = "Session Timing Configuration (New York Time)"
+i_range_sess  = input.session("0400-0855:23456", "London Range Window (04:00 - 08:55 EST)", group=grp_sess, tooltip="London core session before NY Open")
+i_trade_sess  = input.session("0900-1130:23456", "NY Sweep & Reversal Window (09:00 - 11:30 EST)", group=grp_sess, tooltip="New York session opening liquidity window")
+i_tz          = input.string("America/New_York", "Timezone", options=["America/New_York", "UTC", "Europe/London"], group=grp_sess)
+
+grp_filt = "Smart Money Confirmations & Sweep Filters"
+i_min_sweep_pts = input.float(3.0, "Min Sweep Depth (ticks/cents)", minval=1.0, step=1.0, group=grp_filt, tooltip="Minimum pierce beyond London High/Low to confirm liquidity grab")
+i_max_sweep_pts = input.float(50.0, "Max Sweep Depth (ticks/cents)", minval=10.0, step=5.0, group=grp_filt, tooltip="Filters out runaway news breakouts (Max $5.00 pierce on Gold)")
+i_require_disp  = input.bool(true, "Require Displacement (Reversal Candle Close)", group=grp_filt, tooltip="Requires the trigger candle to close in reversal direction (Bearish for Sell, Bullish for Buy)")
+
+grp_risk = "Targets & Risk Management"
+i_target_mode = input.string("50% Range Midpoint (Proven +70.9R)", "Target Mode", 
+     options=["50% Range Midpoint (Proven +70.9R)", "1:2.0 Fixed R:R", "1:2.5 Fixed R:R", "Opposite London Extreme"], 
+     group=grp_risk, tooltip="50% Range Midpoint produced +70.9R (+70.9% net return) in the 80,000-candle backtest.")
+i_sl_buffer   = input.float(5.0, "SL Buffer beyond Sweep Wick (ticks/cents)", minval=0.0, step=1.0, group=grp_risk)
+i_draw_levels = input.bool(true, "Draw Entry, SL & TP Projected Levels", group=grp_risk)
+
+grp_vis = "Visual Customization"
+i_box_color   = input.color(color.new(#2196F3, 88), "London Box Fill Color", group=grp_vis)
+i_box_border  = input.color(#2196F3, "London Box Border Color", group=grp_vis)
+i_high_color  = input.color(color.aqua, "London High Level Color", group=grp_vis)
+i_low_color   = input.color(color.orange, "London Low Level Color", group=grp_vis)
+i_mid_color   = input.color(color.gray, "50% Midpoint Color", group=grp_vis)
+i_sell_color  = input.color(color.red, "Sweep SELL Color", group=grp_vis)
+i_buy_color   = input.color(color.green, "Sweep BUY Color", group=grp_vis)
+i_show_dash   = input.bool(true, "Show Status Dashboard Table", group=grp_vis)
+
+//==============================================================================
+// SESSION & TIME DETECTION
+//==============================================================================
+in_range_session = not na(time(timeframe.period, i_range_sess, i_tz))
+in_trade_session = not na(time(timeframe.period, i_trade_sess, i_tz))
+
+t_day = dayofmonth(time, i_tz)
+var int last_session_day = -1
+new_range_session  = in_range_session and (t_day != last_session_day)
+session_just_ended = not in_range_session and in_range_session[1]
+
+//==============================================================================
+// LONDON RANGE FORMATION (Locked to exact chart time and price)
+//==============================================================================
+var float range_high = na
+var float range_low  = na
+var float range_mid  = na
+var box   range_box  = na
+var line  high_line  = na
+var line  low_line   = na
+var line  mid_line   = na
+var label high_lbl   = na
+var label low_lbl    = na
+var label mid_lbl    = na
+var bool  trade_taken_today = false
+
+if new_range_session
+    last_session_day := t_day
+    range_high := high
+    range_low  := low
+    range_mid  := (range_high + range_low) / 2.0
+    trade_taken_today := false
+    
+    range_box := box.new(left=time, top=range_high, right=time_close, bottom=range_low,
+                         xloc=xloc.bar_time, bgcolor=i_box_color, border_color=i_box_border,
+                         border_style=line.style_solid, border_width=1)
+    
+    high_line := line.new(time, range_high, time_close, range_high, xloc=xloc.bar_time, color=i_high_color, width=1, style=line.style_solid)
+    low_line  := line.new(time, range_low,  time_close, range_low,  xloc=xloc.bar_time, color=i_low_color,  width=1, style=line.style_solid)
+    mid_line  := line.new(time, range_mid,  time_close, range_mid,  xloc=xloc.bar_time, color=i_mid_color,  width=1, style=line.style_dotted)
+
+    high_lbl := label.new(time_close, range_high, "LONDON HIGH: " + str.tostring(range_high, "#.##"), xloc=xloc.bar_time, color=i_high_color, textcolor=color.black, style=label.style_label_left, size=size.small)
+    low_lbl  := label.new(time_close, range_low,  "LONDON LOW: "  + str.tostring(range_low, "#.##"),  xloc=xloc.bar_time, color=i_low_color,  textcolor=color.white, style=label.style_label_left, size=size.small)
+    mid_lbl  := label.new(time_close, range_mid,  "50% MID: "     + str.tostring(range_mid, "#.##"),  xloc=xloc.bar_time, color=color.gray,    textcolor=color.white, style=label.style_label_left, size=size.tiny)
+
+// Update while in London session
+if in_range_session and not na(range_box)
+    range_high := math.max(range_high, high)
+    range_low  := math.min(range_low, low)
+    range_mid  := (range_high + range_low) / 2.0
+
+    box.set_top(range_box, range_high)
+    box.set_bottom(range_box, range_low)
+    box.set_right(range_box, time_close)
+    box.set_text(range_box, "  LONDON SESSION (Pre-NY)\n  High: " + str.tostring(range_high, "#.##") + "\n  Low:  " + str.tostring(range_low, "#.##") + "\n  Mid:  " + str.tostring(range_mid, "#.##"))
+    box.set_text_color(range_box, color.white)
+    box.set_text_size(range_box, size.small)
+    box.set_text_halign(range_box, text.align_left)
+    box.set_text_valign(range_box, text.align_top)
+
+    if not na(high_line) and not na(low_line)
+        line.set_y1(high_line, range_high)
+        line.set_y2(high_line, range_high)
+        line.set_x2(high_line, time_close)
+
+        line.set_y1(low_line, range_low)
+        line.set_y2(low_line, range_low)
+        line.set_x2(low_line, time_close)
+
+        line.set_y1(mid_line, range_mid)
+        line.set_y2(mid_line, range_mid)
+        line.set_x2(mid_line, time_close)
+
+    if not na(high_lbl) and not na(low_lbl)
+        label.set_xy(high_lbl, time_close, range_high)
+        label.set_text(high_lbl, "LONDON HIGH: " + str.tostring(range_high, "#.##"))
+
+        label.set_xy(low_lbl, time_close, range_low)
+        label.set_text(low_lbl, "LONDON LOW: " + str.tostring(range_low, "#.##"))
+
+        label.set_xy(mid_lbl, time_close, range_mid)
+        label.set_text(mid_lbl, "50% MID: " + str.tostring(range_mid, "#.##"))
+
+// Freeze London Box at 08:55 EST (Never cross into NY)
+if session_just_ended and not na(range_box)
+    box.set_right(range_box, time)
+    if not na(high_line) and not na(low_line)
+        int ext_time = time + (18 * 5 * 60 * 1000) // Extend into NY window
+        line.set_x2(high_line, ext_time)
+        line.set_x2(low_line, ext_time)
+        line.set_x2(mid_line, ext_time)
+        line.set_style(high_line, line.style_dashed)
+        line.set_style(low_line, line.style_dashed)
+        if not na(high_lbl)
+            label.set_x(high_lbl, ext_time)
+        if not na(low_lbl)
+            label.set_x(low_lbl, ext_time)
+        if not na(mid_lbl)
+            label.set_x(mid_lbl, ext_time)
+
+//==============================================================================
+// LIQUIDITY SWEEP & REVERSAL DETECTION (During New York Session)
+//==============================================================================
+sweep_sell = false
+sweep_buy  = false
+
+var float  active_entry = na
+var float  active_sl    = na
+var float  active_tp    = na
+var string last_signal_str = "None"
+
+// Check only during the NY Window on confirmed candle close
+if in_trade_session and not trade_taken_today and not na(range_high) and not na(range_low) and barstate.isconfirmed
+    // 1. BEARISH LIQUIDITY SWEEP (Price pierced London High, then closed back below it)
+    if high > range_high and close < range_high
+        float sweep_depth = (high - range_high) / syminfo.mintick
+        bool depth_valid = (sweep_depth >= i_min_sweep_pts) and (sweep_depth <= i_max_sweep_pts)
+        bool disp_valid  = not i_require_disp or (close < open) // Bearish close
+
+        if depth_valid and disp_valid
+            sweep_sell := true
+            trade_taken_today := true
+            active_entry := close
+            active_sl    := high + (i_sl_buffer * syminfo.mintick)
+            float risk_dist = active_sl - active_entry
+            
+            // Determine Take Profit
+            if i_target_mode == "50% Range Midpoint (Proven +70.9R)"
+                active_tp := range_mid
+            else if i_target_mode == "1:2.0 Fixed R:R"
+                active_tp := active_entry - (risk_dist * 2.0)
+            else if i_target_mode == "1:2.5 Fixed R:R"
+                active_tp := active_entry - (risk_dist * 2.5)
+            else // "Opposite London Extreme"
+                active_tp := range_low
+
+            last_signal_str := "SWEEP SELL @ " + str.tostring(active_entry, "#.##")
+
+            if i_draw_levels
+                int proj_time = time + (20 * 5 * 60 * 1000)
+                line.new(time, active_entry, proj_time, active_entry, xloc=xloc.bar_time, color=color.blue, width=2, style=line.style_dotted)
+                label.new(proj_time, active_entry, "ENTRY: " + str.tostring(active_entry, "#.##"), xloc=xloc.bar_time, color=color.blue, textcolor=color.white, style=label.style_label_left, size=size.small)
+
+                line.new(time, active_sl, proj_time, active_sl, xloc=xloc.bar_time, color=color.red, width=2, style=line.style_dashed)
+                label.new(proj_time, active_sl, "SL: " + str.tostring(active_sl, "#.##"), xloc=xloc.bar_time, color=color.red, textcolor=color.white, style=label.style_label_left, size=size.small)
+
+                line.new(time, active_tp, proj_time, active_tp, xloc=xloc.bar_time, color=color.green, width=2, style=line.style_dashed)
+                label.new(proj_time, active_tp, "TP: " + str.tostring(active_tp, "#.##"), xloc=xloc.bar_time, color=color.green, textcolor=color.white, style=label.style_label_left, size=size.small)
+
+    // 2. BULLISH LIQUIDITY SWEEP (Price pierced London Low, then closed back above it)
+    else if low < range_low and close > range_low
+        float sweep_depth = (range_low - low) / syminfo.mintick
+        bool depth_valid = (sweep_depth >= i_min_sweep_pts) and (sweep_depth <= i_max_sweep_pts)
+        bool disp_valid  = not i_require_disp or (close > open) // Bullish close
+
+        if depth_valid and disp_valid
+            sweep_buy := true
+            trade_taken_today := true
+            active_entry := close
+            active_sl    := low - (i_sl_buffer * syminfo.mintick)
+            float risk_dist = active_entry - active_sl
+
+            // Determine Take Profit
+            if i_target_mode == "50% Range Midpoint (Proven +70.9R)"
+                active_tp := range_mid
+            else if i_target_mode == "1:2.0 Fixed R:R"
+                active_tp := active_entry + (risk_dist * 2.0)
+            else if i_target_mode == "1:2.5 Fixed R:R"
+                active_tp := active_entry + (risk_dist * 2.5)
+            else // "Opposite London Extreme"
+                active_tp := range_high
+
+            last_signal_str := "SWEEP BUY @ " + str.tostring(active_entry, "#.##")
+
+            if i_draw_levels
+                int proj_time = time + (20 * 5 * 60 * 1000)
+                line.new(time, active_entry, proj_time, active_entry, xloc=xloc.bar_time, color=color.blue, width=2, style=line.style_dotted)
+                label.new(proj_time, active_entry, "ENTRY: " + str.tostring(active_entry, "#.##"), xloc=xloc.bar_time, color=color.blue, textcolor=color.white, style=label.style_label_left, size=size.small)
+
+                line.new(time, active_sl, proj_time, active_sl, xloc=xloc.bar_time, color=color.red, width=2, style=line.style_dashed)
+                label.new(proj_time, active_sl, "SL: " + str.tostring(active_sl, "#.##"), xloc=xloc.bar_time, color=color.red, textcolor=color.white, style=label.style_label_left, size=size.small)
+
+                line.new(time, active_tp, proj_time, active_tp, xloc=xloc.bar_time, color=color.green, width=2, style=line.style_dashed)
+                label.new(proj_time, active_tp, "TP: " + str.tostring(active_tp, "#.##"), xloc=xloc.bar_time, color=color.green, textcolor=color.white, style=label.style_label_left, size=size.small)
+
+// Plot Shapes
+plotshape(sweep_sell, title="SWEEP SELL Signal", location=location.abovebar, color=i_sell_color, style=shape.triangledown, size=size.normal, text="SWEEP SELL")
+plotshape(sweep_buy,  title="SWEEP BUY Signal",  location=location.belowbar, color=i_buy_color,  style=shape.triangleup,   size=size.normal, text="SWEEP BUY")
+
+// Alerts
+alertcondition(sweep_sell, title="NY Liquidity Sweep SELL", message="NY Liquidity Sweep SELL on {{ticker}} at {{close}}! Swept London High.")
+alertcondition(sweep_buy,  title="NY Liquidity Sweep BUY",  message="NY Liquidity Sweep BUY on {{ticker}} at {{close}}! Swept London Low.")
+
+//==============================================================================
+// DASHBOARD TABLE
+//==============================================================================
+var table dash = table.new(position.top_right, 2, 5, bgcolor=color.new(color.black, 20), border_color=color.gray, border_width=1)
+
+if barstate.islast and i_show_dash
+    string sess_status = in_range_session ? "London Session Active" : (in_trade_session ? "NY Sweep Window Active" : "Outside NY Session")
+    color status_color = in_trade_session ? color.green : (in_range_session ? color.orange : color.gray)
+    
+    table.cell(dash, 0, 0, "London Sweep", bgcolor=color.navy, text_color=color.white, text_size=size.small)
+    table.cell(dash, 1, 0, sess_status, bgcolor=status_color, text_color=color.white, text_size=size.small)
+
+    table.cell(dash, 0, 1, "London High", text_color=color.aqua, text_size=size.small)
+    table.cell(dash, 1, 1, str.tostring(range_high, "#.##"), text_color=color.white, text_size=size.small)
+
+    table.cell(dash, 0, 2, "London Low", text_color=color.orange, text_size=size.small)
+    table.cell(dash, 1, 2, str.tostring(range_low, "#.##"), text_color=color.white, text_size=size.small)
+
+    table.cell(dash, 0, 3, "Last Signal", text_color=color.aqua, text_size=size.small)
+    table.cell(dash, 1, 3, last_signal_str, text_color=color.white, text_size=size.small)
+
+    table.cell(dash, 0, 4, "Today Trade", text_color=color.silver, text_size=size.small)
+    table.cell(dash, 1, 4, trade_taken_today ? "Completed (1/1)" : "Waiting", text_color=trade_taken_today ? color.lime : color.yellow, text_size=size.small)

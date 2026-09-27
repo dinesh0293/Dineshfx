@@ -1,21 +1,14 @@
-# Dineshfx - Forex & Commodities Trading Strategy Hub
+# Dineshfx - Forex & Commodities Algorithmic Trading Hub
 
-A centralized repository for systematic, automated, and algorithmic trading strategies across **Forex** and **Commodities** (Gold / XAUUSD, Silver, US Indices, Majors).
-
-Each strategy in this repository is packaged with:
-- **MetaTrader 5 (MT5)** automated Expert Advisors (EAs) and indicators (`.mq5` / `.ex5`).
-- **TradingView** Pine Script v5 indicators (`.pine`).
-- Comprehensive documentation, session times, broker GMT mapping (Vantage Markets & CPT Markets), and risk management rules.
+A repository of institutional algorithmic trading strategies for **MetaTrader 5 (MT5)** and **TradingView**, optimized for **XAUUSD (Gold)**, Commodities, and Forex majors on **Vantage Markets** and **CPT Markets**.
 
 ---
 
-## Strategy Catalog
+## Active Strategy Catalog
 
-| # | Strategy Name | Primary Instruments | Timeframe | Platforms | Status |
-| :---: | :--- | :--- | :---: | :--- | :---: |
-| **01** | [**NY Open (9:30 AM EST) Breakout**](strategies/01_NY_Open_Breakout/) | XAUUSD (Gold), US30, NAS100 | M5 | MT5 (EA + Indicator) & TradingView | **Active** |
-| **02** | *Upcoming Strategy* | TBD | TBD | MT5 & TradingView | Planned |
-| **03** | *Upcoming Strategy* | TBD | TBD | MT5 & TradingView | Planned |
+| # | Strategy Name | Asset | Timeframe | Strategy Logic | Win Rate | Profit Factor | 13.5-Mo Net Return | Status |
+| :---: | :--- | :---: | :---: | :--- | :---: | :---: | :---: | :---: |
+| **01** | [**London Liquidity Sweep & NY Reversal**](strategies/01_London_Sweep_NY_Reversal/) | **XAUUSD** | **M5** | Institutional Judas Swing / Mean Reversion to 50% Midpoint | **31.3%** | **1.58** | **+70.9 R (+70.9%)** | **Production** |
 
 ---
 
@@ -24,34 +17,33 @@ Each strategy in this repository is packaged with:
 ```text
 Dineshfx/
 ├── README.md                                  # Repository overview and strategy index
-├── .gitignore                                 # Git rules for MT5 & trading files
+├── .gitignore                                 # Git rules for MT5 & binary caches
 └── strategies/
-    └── 01_NY_Open_Breakout/                   # New York Open ORB Strategy
-        ├── README.md                          # Strategy documentation & parameter guide
-        ├── mql5/                              # MetaTrader 5 source & binaries
-        │   ├── NY_Open_Breakout_EA.mq5        # Automated Expert Advisor
-        │   ├── NY_Open_Breakout_EA.ex5        # Compiled EA binary
-        │   ├── NY_Open_Range_Indicator.mq5    # Session box & alert indicator
-        │   └── NY_Open_Range_Indicator.ex5    # Compiled indicator binary
-        └── tradingview/                       # TradingView Pine Script v5
-            └── NY_Open_Breakout.pine          # Multi-session box, signals & dashboard
+    └── 01_London_Sweep_NY_Reversal/           # Production Strategy: Liquidity Sweep & Mean Reversion
+        ├── README.md                          # Full strategy mechanics & backtest report
+        ├── mql5/                              # MetaTrader 5 source & compiled binaries
+        │   ├── London_Sweep_NY_Reversal_EA.mq5
+        │   ├── London_Sweep_NY_Reversal_EA.ex5
+        │   ├── London_Sweep_NY_Reversal_Indicator.mq5
+        │   └── London_Sweep_NY_Reversal_Indicator.ex5
+        └── tradingview/                       # TradingView Pine Script v6
+            └── London_Sweep_NY_Reversal.pine
 ```
 
 ---
 
-## How to Add New Strategies
+## Broker Time Synchronization (Vantage Markets & CPT Markets)
 
-When adding a new strategy:
-1. Create a new folder under `strategies/` (e.g. `strategies/02_Strategy_Name/`).
-2. Include:
-   - `mql5/`: EA and indicators for MetaTrader 5.
-   - `tradingview/`: Pine Script v5 code.
-   - `README.md`: Entry rules, stop loss logic, and broker time mapping.
-3. Update the Strategy Catalog table in this root `README.md`.
+Vantage Markets and CPT Markets MT5 servers run on **GMT+2 / GMT+3** (Cyprus server time, consistently **+7 hours ahead of New York EST**):
+
+| Phase | US Eastern Time (EST/EDT) | Broker Server Time (GMT+3) | Parameter in EA / Indicator |
+| :--- | :--- | :--- | :--- |
+| **London Core Range Start** | 04:00 AM | **11:00** | `InpRangeStartTime = "11:00"` |
+| **Pre-NY Freeze (5 min before NY)** | 08:55 AM | **15:55** | `InpRangeEndTime = "15:55"` |
+| **NY Sweep Window Open** | 09:00 AM | **16:00** | `InpTradeStartTime = "16:00"` |
+| **NY Sweep Window Close** | 11:30 AM | **18:30** | `InpTradeEndTime = "18:30"` |
 
 ---
 
-## Broker Compatibility
-Tested and configured for:
-- **Vantage Markets** (MT5 Raw / Standard - Server Time GMT+2 / GMT+3)
-- **CPT Markets** (MT5 ECN / Prime - Server Time GMT+2 / GMT+3)
+## License
+MIT License. Developed for algorithmic automated execution and backtesting on MetaTrader 5 and TradingView.
