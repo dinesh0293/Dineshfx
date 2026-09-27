@@ -1,4 +1,4 @@
-//@version=5
+//@version=6
 indicator("NY Open (9:30 AM EST) Breakout Strategy [Dineshfx]", shorttitle="NY ORB [Dineshfx]", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
 
 //==============================================================================
@@ -16,8 +16,8 @@ i_rr          = input.float(2.0, "Risk:Reward Ratio (TP)", minval=0.5, step=0.5,
 i_draw_levels = input.bool(true, "Draw SL & TP Projected Levels", group=grp_risk)
 
 grp_vis = "Visual Customization"
-i_box_color   = input.color(color.new(color.dodgerblue, 85), "Box Fill Color", group=grp_vis)
-i_box_border  = input.color(color.dodgerblue, "Box Border Color", group=grp_vis)
+i_box_color   = input.color(color.new(#2196F3, 85), "Box Fill Color", group=grp_vis)
+i_box_border  = input.color(#2196F3, "Box Border Color", group=grp_vis)
 i_buy_color   = input.color(color.green, "Buy Signal Color", group=grp_vis)
 i_sell_color  = input.color(color.red, "Sell Signal Color", group=grp_vis)
 i_show_dash   = input.bool(true, "Show Status Dashboard Table", group=grp_vis)
@@ -39,22 +39,19 @@ if is_new_day
 // Session boundary triggers
 range_just_started = in_range_session and not in_range_session[1]
 range_just_ended   = not in_range_session and in_range_session[1]
-trade_just_started = in_trade_session and not in_trade_session[1]
 
 //==============================================================================
 // RANGE FORMATION LOGIC
 //==============================================================================
 var float range_high = na
 var float range_low  = na
-var int   range_start_bar = na
-var box   range_box = na
+var box   range_box  = na
 var bool  trade_taken_today = false
 
 // Reset when new range session starts
 if range_just_started or (is_new_day and in_range_session)
     range_high := high
     range_low  := low
-    range_start_bar := bar_index
     trade_taken_today := false
     range_box := box.new(left=bar_index, top=range_high, right=bar_index, bottom=range_low,
                          bgcolor=i_box_color, border_color=i_box_border, border_style=line.style_solid, border_width=1)
