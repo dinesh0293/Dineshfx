@@ -1,65 +1,57 @@
-# New York Open (9:30 AM EST) Breakout Strategy - MetaTrader 5
+# Dineshfx - Forex & Commodities Trading Strategy Hub
 
-An automated and indicator-assisted **Opening Range Breakout (ORB)** system for MetaTrader 5, tailored for **XAUUSD (Gold)** and US equity indices (US30, NAS100) on brokers like **Vantage Markets** and **CPT Markets**.
+A centralized repository for systematic, automated, and algorithmic trading strategies across **Forex** and **Commodities** (Gold / XAUUSD, Silver, US Indices, Majors).
 
----
-
-## Strategy Rules
-
-1. **Pre-Market Range Box**:
-   - High and Low are marked between **8:00 AM – 9:25 AM EST** (Broker server time **15:00 – 16:25** on GMT+2/GMT+3 brokers).
-2. **Breakout Signal**:
-   - The US New York session opens at **9:30 AM EST** (**16:30 Broker Time**).
-   - Wait for a 5-minute candle (**M5**) to **close cleanly** outside the pre-market box:
-     - **Buy Signal**: `Close[1] > RangeHigh` and `Open[1] <= RangeHigh`.
-     - **Sell Signal**: `Close[1] < RangeLow` and `Open[1] >= RangeLow`.
-3. **Risk Management & Exit**:
-   - **Stop Loss**: Placed below/above the breakout candle (with buffer) or at the box midpoint.
-   - **Take Profit**: Calculated from Stop Loss distance using a strict Risk-to-Reward ratio (e.g., 1:2 R:R).
-   - **Trade Frequency**: Strictly max 1 trade per day.
+Each strategy in this repository is packaged with:
+- **MetaTrader 5 (MT5)** automated Expert Advisors (EAs) and indicators (`.mq5` / `.ex5`).
+- **TradingView** Pine Script v5 indicators (`.pine`).
+- Comprehensive documentation, session times, broker GMT mapping (Vantage Markets & CPT Markets), and risk management rules.
 
 ---
 
-## Time Conversion (Vantage & CPT Markets)
+## Strategy Catalog
 
-| Phase | US Eastern Time (EST/EDT) | Broker Server Time (GMT+2 / GMT+3) | Parameter |
-| :--- | :--- | :--- | :--- |
-| **Range Start** | 8:00 AM | **15:00** | `InpRangeStartTime = "15:00"` |
-| **Range End** | 9:25 AM | **16:25** | `InpRangeEndTime = "16:25"` |
-| **Trade Window Open** | 9:30 AM | **16:30** | `InpTradeStartTime = "16:30"` |
-| **Trade Window Close** | 10:15 AM | **17:15** | `InpTradeEndTime = "17:15"` |
+| # | Strategy Name | Primary Instruments | Timeframe | Platforms | Status |
+| :---: | :--- | :--- | :---: | :--- | :---: |
+| **01** | [**NY Open (9:30 AM EST) Breakout**](strategies/01_NY_Open_Breakout/) | XAUUSD (Gold), US30, NAS100 | M5 | MT5 (EA + Indicator) & TradingView | **Active** |
+| **02** | *Upcoming Strategy* | TBD | TBD | MT5 & TradingView | Planned |
+| **03** | *Upcoming Strategy* | TBD | TBD | MT5 & TradingView | Planned |
 
 ---
 
-## Project Structure
+## Repository Structure
 
 ```text
-NY_Open_Breakout_MT5/
-├── NY_Open_Breakout_EA.mq5        # Full automated Expert Advisor source code
-├── NY_Open_Breakout_EA.ex5        # Compiled executable EA binary
-├── NY_Open_Range_Indicator.mq5    # Chart visual box & alert indicator source code
-├── NY_Open_Range_Indicator.ex5    # Compiled indicator binary
-├── .gitignore                     # Git ignore rules for MT5
-└── README.md                      # Documentation & user guide
+Dineshfx/
+├── README.md                                  # Repository overview and strategy index
+├── .gitignore                                 # Git rules for MT5 & trading files
+└── strategies/
+    └── 01_NY_Open_Breakout/                   # New York Open ORB Strategy
+        ├── README.md                          # Strategy documentation & parameter guide
+        ├── mql5/                              # MetaTrader 5 source & binaries
+        │   ├── NY_Open_Breakout_EA.mq5        # Automated Expert Advisor
+        │   ├── NY_Open_Breakout_EA.ex5        # Compiled EA binary
+        │   ├── NY_Open_Range_Indicator.mq5    # Session box & alert indicator
+        │   └── NY_Open_Range_Indicator.ex5    # Compiled indicator binary
+        └── tradingview/                       # TradingView Pine Script v5
+            └── NY_Open_Breakout.pine          # Multi-session box, signals & dashboard
 ```
 
 ---
 
-## Installation & Deployment
+## How to Add New Strategies
 
-### 1. MT5 Folder Locations
-- Place `NY_Open_Range_Indicator.ex5` into:  
-  `[MT5 Data Folder]\MQL5\Indicators\`
-- Place `NY_Open_Breakout_EA.ex5` into:  
-  `[MT5 Data Folder]\MQL5\Experts\`
-
-### 2. Chart Setup
-1. Open an **`XAUUSD`** chart on the **`M5`** timeframe.
-2. Drag `NY_Open_Breakout_EA` onto the chart.
-3. In the **Common** tab, check **"Allow Algo Trading"**.
-4. In the top toolbar, ensure the **"Algo Trading"** master switch is **Green**.
+When adding a new strategy:
+1. Create a new folder under `strategies/` (e.g. `strategies/02_Strategy_Name/`).
+2. Include:
+   - `mql5/`: EA and indicators for MetaTrader 5.
+   - `tradingview/`: Pine Script v5 code.
+   - `README.md`: Entry rules, stop loss logic, and broker time mapping.
+3. Update the Strategy Catalog table in this root `README.md`.
 
 ---
 
-## License
-MIT License. For educational and automated algorithmic trading purposes. Always test on demo accounts before deploying on live capital.
+## Broker Compatibility
+Tested and configured for:
+- **Vantage Markets** (MT5 Raw / Standard - Server Time GMT+2 / GMT+3)
+- **CPT Markets** (MT5 ECN / Prime - Server Time GMT+2 / GMT+3)

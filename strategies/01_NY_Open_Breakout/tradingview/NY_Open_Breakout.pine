@@ -1,0 +1,168 @@
+//@version=5
+indicator("NY Open (9:30 AM EST) Breakout Strategy [Dineshfx]", shorttitle="NY ORB [Dineshfx]", overlay=true, max_boxes_count=500, max_lines_count=500, max_labels_count=500)
+
+//==============================================================================
+// INPUTS & SETTINGS
+//==============================================================================
+grp_sess = "Session Configuration (New York Time)"
+i_range_sess  = input.session("0800-0925:23456", "Pre-Market Range Session", group=grp_sess, tooltip="Range formation window (8:00 AM - 9:25 AM EST)")
+i_trade_sess  = input.session("0930-1015:23456", "NY Open Trade Window", group=grp_sess, tooltip="Entry window starting right at 9:30 AM NYSE open")
+i_tz          = input.string("America/New_York", "Timezone", group=grp_sess)
+
+grp_risk = "Trade Management & Targets"
+i_sl_mode     = input.string("Breakout Candle", "Stop Loss Mode", options=["Breakout Candle", "Box Midpoint", "Opposite Box Edge"], group=grp_risk)
+i_sl_buffer   = input.float(5.0, "SL Buffer (ticks/points)", minval=0.0, step=1.0, group=grp_risk)
+i_rr          = input.float(2.0, "Risk:Reward Ratio (TP)", minval=0.5, step=0.5, group=grp_risk)
+i_draw_levels = input.bool(true, "Draw SL & TP Projected Levels", group=grp_risk)
+
+grp_vis = "Visual Customization"
+i_box_color   = input.color(color.new(color.dodgerblue, 85), "Box Fill Color", group=grp_vis)
+i_box_border  = input.color(color.dodgerblue, "Box Border Color", group=grp_vis)
+i_buy_color   = input.color(color.green, "Buy Signal Color", group=grp_vis)
+i_sell_color  = input.color(color.red, "Sell Signal Color", group=grp_vis)
+i_show_dash   = input.bool(true, "Show Status Dashboard Table", group=grp_vis)
+
+//==============================================================================
+// SESSION DETECTION
+//==============================================================================
+in_range_session = not na(time(timeframe.period, i_range_sess, i_tz))
+in_trade_session = not na(time(timeframe.period, i_trade_sess, i_tz))
+
+// Day tracking
+var int cur_day = -1
+t_day = dayofmonth(time, i_tz)
+is_new_day = t_day != cur_day
+
+if is_new_day
+    cur_day := t_day
+
+// Session boundary triggers
+range_just_started = in_range_session and not in_range_session[1]
+range_just_ended   = not in_range_session and in_range_session[1]
+trade_just_started = in_trade_session and not in_trade_session[1]
+
+//==============================================================================
+// RANGE FORMATION LOGIC
+//==============================================================================
+var float range_high = na
+var float range_low  = na
+var int   range_start_bar = na
+var box   range_box = na
+var bool  trade_taken_today = false
+
+// Reset when new range session starts
+if range_just_started or (is_new_day and in_range_session)
+    range_high := high
+    range_low  := low
+    range_start_bar := bar_index
+    trade_taken_today := false
+    range_box := box.new(left=bar_index, top=range_high, right=bar_index, bottom=range_low,
+                         bgcolor=i_box_color, border_color=i_box_border, border_style=line.style_solid, border_width=1)
+
+// Update range while in range session
+if in_range_session
+    range_high := math.max(nz(range_high, high), high)
+    range_low  := math.min(nz(range_low, low), low)
+    if not na(range_box)
+        box.set_top(range_box, range_high)
+        box.set_bottom(range_box, range_low)
+        box.set_right(range_box, bar_index)
+
+// Freeze box when range session ends
+if range_just_ended and not na(range_box)
+    box.set_right(range_box, bar_index)
+
+//==============================================================================
+// BREAKOUT DETECTION & SIGNAL LOGIC
+//==============================================================================
+buy_signal  = false
+sell_signal = false
+
+var float active_entry = na
+var float active_sl    = na
+var float active_tp    = na
+
+if in_trade_session and not trade_taken_today and not na(range_high) and not na(range_low)
+    // Bullish Breakout: Candle closes cleanly above range high
+    if close > range_high and open <= range_high
+        buy_signal := true
+        trade_taken_today := true
+        active_entry := close
+        
+        // Calculate Stop Loss
+        if i_sl_mode == "Breakout Candle"
+            active_sl := low - (i_sl_buffer * syminfo.mintick)
+        else if i_sl_mode == "Box Midpoint"
+            active_sl := (range_high + range_low) / 2.0
+        else // "Opposite Box Edge"
+            active_sl := range_low - (i_sl_buffer * syminfo.mintick)
+        
+        // Calculate Take Profit
+        float risk_dist = active_entry - active_sl
+        active_tp := active_entry + (risk_dist * i_rr)
+
+        // Draw SL / TP Visual Levels
+        if i_draw_levels
+            line.new(bar_index, active_sl, bar_index + 15, active_sl, color=color.red, width=2, style=line.style_dashed)
+            label.new(bar_index + 15, active_sl, "SL: " + str.tostring(active_sl, "#.##"), color=color.red, textcolor=color.white, style=label.style_label_left, size=size.small)
+            
+            line.new(bar_index, active_tp, bar_index + 15, active_tp, color=color.green, width=2, style=line.style_dashed)
+            label.new(bar_index + 15, active_tp, "TP (1:" + str.tostring(i_rr) + "): " + str.tostring(active_tp, "#.##"), color=color.green, textcolor=color.white, style=label.style_label_left, size=size.small)
+
+    // Bearish Breakout: Candle closes cleanly below range low
+    else if close < range_low and open >= range_low
+        sell_signal := true
+        trade_taken_today := true
+        active_entry := close
+        
+        // Calculate Stop Loss
+        if i_sl_mode == "Breakout Candle"
+            active_sl := high + (i_sl_buffer * syminfo.mintick)
+        else if i_sl_mode == "Box Midpoint"
+            active_sl := (range_high + range_low) / 2.0
+        else // "Opposite Box Edge"
+            active_sl := range_high + (i_sl_buffer * syminfo.mintick)
+        
+        // Calculate Take Profit
+        float risk_dist = active_sl - active_entry
+        active_tp := active_entry - (risk_dist * i_rr)
+
+        // Draw SL / TP Visual Levels
+        if i_draw_levels
+            line.new(bar_index, active_sl, bar_index + 15, active_sl, color=color.red, width=2, style=line.style_dashed)
+            label.new(bar_index + 15, active_sl, "SL: " + str.tostring(active_sl, "#.##"), color=color.red, textcolor=color.white, style=label.style_label_left, size=size.small)
+            
+            line.new(bar_index, active_tp, bar_index + 15, active_tp, color=color.green, width=2, style=line.style_dashed)
+            label.new(bar_index + 15, active_tp, "TP (1:" + str.tostring(i_rr) + "): " + str.tostring(active_tp, "#.##"), color=color.green, textcolor=color.white, style=label.style_label_left, size=size.small)
+
+// Plot Shapes
+plotshape(buy_signal, title="BUY Breakout Signal", location=location.belowbar, color=i_buy_color, style=shape.triangleup, size=size.normal, text="NY BUY")
+plotshape(sell_signal, title="SELL Breakout Signal", location=location.abovebar, color=i_sell_color, style=shape.triangledown, size=size.normal, text="NY SELL")
+
+// Alerts
+alertcondition(buy_signal, title="NY Open BUY Breakout", message="NY Open BUY Breakout on {{ticker}} at {{close}}! Range High: {{plot_0}}")
+alertcondition(sell_signal, title="NY Open SELL Breakout", message="NY Open SELL Breakout on {{ticker}} at {{close}}! Range Low: {{plot_1}}")
+
+plot(range_high, "Range High", color=color.new(color.aqua, 50), style=plot.style_stepline)
+plot(range_low,  "Range Low",  color=color.new(color.orange, 50), style=plot.style_stepline)
+
+//==============================================================================
+// DASHBOARD TABLE
+//==============================================================================
+var table dash = table.new(position.top_right, 2, 4, bgcolor=color.new(color.black, 20), border_color=color.gray, border_width=1)
+
+if barstate.islast and i_show_dash
+    string sess_status = in_range_session ? "Forming Pre-Market Box" : (in_trade_session ? "NY Trade Window Active" : "Outside NY Session")
+    color status_color = in_trade_session ? color.green : (in_range_session ? color.orange : color.gray)
+    
+    table.cell(dash, 0, 0, "NY Breakout", bgcolor=color.navy, text_color=color.white, text_size=size.small)
+    table.cell(dash, 1, 0, sess_status, bgcolor=status_color, text_color=color.white, text_size=size.small)
+
+    table.cell(dash, 0, 1, "Range High", text_color=color.aqua, text_size=size.small)
+    table.cell(dash, 1, 1, str.tostring(range_high, "#.##"), text_color=color.white, text_size=size.small)
+
+    table.cell(dash, 0, 2, "Range Low", text_color=color.orange, text_size=size.small)
+    table.cell(dash, 1, 2, str.tostring(range_low, "#.##"), text_color=color.white, text_size=size.small)
+
+    table.cell(dash, 0, 3, "Today Trade", text_color=color.silver, text_size=size.small)
+    table.cell(dash, 1, 3, trade_taken_today ? "Completed (1/1)" : "Waiting", text_color=trade_taken_today ? color.lime : color.yellow, text_size=size.small)
