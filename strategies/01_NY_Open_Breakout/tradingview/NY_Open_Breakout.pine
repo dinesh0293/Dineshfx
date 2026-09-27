@@ -5,13 +5,14 @@ indicator("NY Open (9:30 AM EST) Breakout Strategy [Dineshfx]", shorttitle="NY O
 // INPUTS & SETTINGS
 //==============================================================================
 grp_sess = "Session Timing Configuration"
-i_sess_preset = input.string("London -> 5 min before NY (03:00 - 08:55)", "Session Mode", 
-     options=["London -> 5 min before NY (03:00 - 08:55)", "London -> NYSE Bell (03:00 - 09:25)", "Pre-Market Only (08:00 - 08:55)", "Custom"], 
-     group=grp_sess, tooltip="Select session preset. Default ends at 08:55 (5 mins before 09:00 NY session) matching London High/Low.")
+i_sess_preset = input.string("London Session (04:00 - 08:55 EST)", "Session Mode", 
+     options=["London Session (04:00 - 08:55 EST)", "London Early (03:00 - 08:55 EST)", "Pre-Market Only (08:00 - 08:55 EST)", "Custom"], 
+     group=grp_sess, tooltip="Select session preset. 'London Session (04:00 - 08:55 EST)' aligns with London core hours (Low 4354 / 4340).")
 
-i_custom_range = input.session("0300-0855:23456", "Custom Range Session (End 5 min before NY)", group=grp_sess)
-i_custom_trade = input.session("0900-1030:23456", "Custom NY Trade Window (Breakout Window)", group=grp_sess)
-i_tz           = input.string("America/New_York", "Timezone", group=grp_sess)
+i_custom_range = input.session("0400-0855:23456", "Custom Range Session (HHMM-HHMM)", group=grp_sess)
+i_custom_trade = input.session("0900-1030:23456", "Custom NY Trade Window (HHMM-HHMM)", group=grp_sess)
+i_tz           = input.string("America/New_York", "Timezone", 
+     options=["America/New_York", "UTC", "Europe/London"], group=grp_sess)
 
 grp_mark = "High / Low Price Markings"
 i_show_hl_lines = input.bool(true, "Show High & Low Level Extension Lines", group=grp_mark)
@@ -41,15 +42,15 @@ string range_sess_str = ""
 string trade_sess_str = ""
 string sess_short_title = ""
 
-if i_sess_preset == "London -> 5 min before NY (03:00 - 08:55)"
+if i_sess_preset == "London Session (04:00 - 08:55 EST)"
+    range_sess_str   := "0400-0855:23456"
+    trade_sess_str   := "0900-1030:23456"
+    sess_short_title := "LONDON"
+else if i_sess_preset == "London Early (03:00 - 08:55 EST)"
     range_sess_str   := "0300-0855:23456"
     trade_sess_str   := "0900-1030:23456"
     sess_short_title := "LONDON"
-else if i_sess_preset == "London -> NYSE Bell (03:00 - 09:25)"
-    range_sess_str   := "0300-0925:23456"
-    trade_sess_str   := "0930-1030:23456"
-    sess_short_title := "LONDON"
-else if i_sess_preset == "Pre-Market Only (08:00 - 08:55)"
+else if i_sess_preset == "Pre-Market Only (08:00 - 08:55 EST)"
     range_sess_str   := "0800-0855:23456"
     trade_sess_str   := "0900-1030:23456"
     sess_short_title := "PRE-NY"
@@ -61,11 +62,11 @@ else // Custom
 in_range_session = not na(time(timeframe.period, range_sess_str, i_tz))
 in_trade_session = not na(time(timeframe.period, trade_sess_str, i_tz))
 
-// Current New York Calendar Day
+// Current Calendar Day in chosen timezone
 t_day = dayofmonth(time, i_tz)
 var int last_session_day = -1
 
-// Triggers on the first bar of the range session each day
+// Triggers strictly on the first bar of the range session each day
 new_range_session = in_range_session and (t_day != last_session_day)
 
 // Detect when range session finishes (5 mins before NY Open)
@@ -116,7 +117,7 @@ if in_range_session and not na(range_box)
     range_low  := math.min(range_low, low)
     float range_mid = (range_high + range_low) / 2.0
     
-    // Box expands strictly until 08:55 (5 mins before NY)
+    // Box expands strictly until range end (5 mins before NY)
     box.set_top(range_box, range_high)
     box.set_bottom(range_box, range_low)
     box.set_right(range_box, time_close)
@@ -150,7 +151,6 @@ if in_range_session and not na(range_box)
 // FREEZE BOX PERMANENTLY when range session ends (5 mins before NY)
 // The box NEVER crosses into the NY session!
 if session_just_ended and not na(range_box)
-    // Freeze right edge of box permanently at the last pre-NY bar
     box.set_right(range_box, time)
     
     // Extend High & Low dashed lines into NY session so you can see breakouts clearly
