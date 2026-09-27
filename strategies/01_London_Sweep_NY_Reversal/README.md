@@ -68,6 +68,13 @@ We tested **9 different profit locking and trade management models** across 80,0
    - Monitors running position in real-time.
    - Once price covers **75% of the distance to the TP target**, the EA automatically modifies the Stop Loss to **Break-Even (0.0R)** or **locks +1.0R / 50% profit**, securing the trade from turning into a loss.
 
+4. **News Shield & Event Protection (v2.20)**:
+   - **Auto-NFP Blocker (`InpFilterNFPFriday = true`)**: Automatically identifies the 1st Friday of every month and halts trading on Non-Farm Payrolls day.
+   - **MT5 High-Impact USD News Filter (`InpFilterHighNews = true`)**: Queries MT5's native Economic Calendar for high-impact USD events within 45 minutes before/after the session.
+   - **Date Blacklist (`InpSkipDatesList`)**: Comma-separated list to blacklist specific calendar dates (e.g., `"2026.09.30, 2026.10.14"`).
+   - **One-Click Chart Pause Button (`InpShowNewsButton = true`)**: Directly on your MT5 chart, click the green button to turn it into red `"⚠️ NEWS PAUSED"`, instantly pausing all automated execution.
+   - **Spread Guard (`InpMaxSpreadPoints = 60`)**: Automatically rejects entries if spread widens beyond 60 points during news spikes.
+
 ---
 
 ## Recommendations for a $100 Account

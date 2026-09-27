@@ -5,8 +5,8 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2026, Dineshfx"
 #property link      "https://github.com/dinesh0293/Dineshfx"
-#property version   "2.10"
-#property description "Institutional Liquidity Sweep & Mean Reversion Strategy for Gold (XAUUSD) with Dynamic Profit Lock Engine."
+#property version   "2.20"
+#property description "Institutional Liquidity Sweep & Mean Reversion Strategy for Gold (XAUUSD) with Dynamic Profit Lock Engine and High-Impact News Filter."
 
 #include <Trade\Trade.mqh>
 #include <Trade\PositionInfo.mqh>
@@ -57,6 +57,13 @@ input ENUM_LOCK_LEVEL        InpLockLevel         = LOCK_TO_BREAK_EVEN;// Lock L
 input double                 InpLockTriggerR      = 2.0;               // Trigger at R-Multiple (for R mode)
 input double                 InpLockProfitFixedR  = 0.5;               // Custom R locked (for R mode)
 
+input group "=== News Protection & Event Filters ==="
+input bool                   InpFilterNFPFriday   = true;              // Auto-Block First Friday of Month (NFP Jobs Report)
+input bool                   InpFilterHighNews    = true;              // Auto-Filter MT5 High-Impact USD News
+input int                    InpNewsBufferMins    = 45;                // News Buffer Window (minutes before/after)
+input string                 InpSkipDatesList     = "";                // Blacklist Dates (e.g. "2026.09.30, 2026.10.14")
+input bool                   InpShowNewsButton    = true;              // Show One-Click Pause Button on Chart
+
 input group "=== Risk & Money Management ==="
 input double                 InpRiskPercent       = 1.0;        // Risk Percentage (% of Equity)
 input double                 InpFixedLotSize      = 0.0;        // Fixed Lot (0.0 = Dynamic Auto-Risk, e.g. 0.01 for $100 account)
@@ -83,6 +90,9 @@ bool           m_rangeFormed = false;
 ulong          m_trackedTicket = 0;
 double         m_trackedInitialRisk = 0.0;
 
+bool           m_manualNewsPause = false;
+string         m_newsStatusText  = "CLEAR";
+
 //+------------------------------------------------------------------+
 //| Convert "HH:MM" string to seconds from midnight                  |
 //+------------------------------------------------------------------+
@@ -100,6 +110,118 @@ int TimeToSecondsOfDay(string timeStr)
 }
 
 //+------------------------------------------------------------------+
+//| Check if today is the first Friday of the month (NFP Day)        |
+//+------------------------------------------------------------------+
+bool IsNFPFriday(datetime time)
+{
+   if(!InpFilterNFPFriday) return false;
+   MqlDateTime dt;
+   TimeToStruct(time, dt);
+   // Day of week: 5 = Friday. If day of month is between 1 and 7, it is NFP day!
+   if(dt.day_of_week == 5 && dt.day <= 7)
+      return true;
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| Check if today's date is in the user blacklist list              |
+//+------------------------------------------------------------------+
+bool IsDateBlacklisted(datetime time, string datesList)
+{
+   if(StringLen(datesList) == 0) return false;
+   string todayStr = TimeToString(time, TIME_DATE); // "YYYY.MM.DD"
+   string dates[];
+   int count = StringSplit(datesList, ',', dates);
+   for(int i = 0; i < count; i++)
+   {
+      string d = dates[i];
+      StringTrimLeft(d);
+      StringTrimRight(d);
+      if(d == todayStr) return true;
+   }
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| Check MT5 Economic Calendar for High-Impact USD Events           |
+//+------------------------------------------------------------------+
+bool IsHighImpactUSDNewsNear(int bufferMinutes, string &eventNameOut)
+{
+   if(!InpFilterHighNews) return false;
+
+   datetime now = TimeCurrent();
+   datetime from = now - (bufferMinutes * 60);
+   datetime to   = now + (bufferMinutes * 60);
+
+   MqlCalendarValue values[];
+   int count = CalendarValueHistory(values, from, to, "US");
+   if(count > 0)
+   {
+      for(int i = 0; i < count; i++)
+      {
+         MqlCalendarEvent event;
+         if(CalendarEventById(values[i].event_id, event))
+         {
+            if(event.importance == CALENDAR_IMPORTANCE_HIGH)
+            {
+               eventNameOut = event.name;
+               return true;
+            }
+         }
+      }
+   }
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| Create or update on-chart One-Click Pause Button                 |
+//+------------------------------------------------------------------+
+void UpdatePauseButton()
+{
+   if(!InpShowNewsButton) return;
+
+   string btnName = "SWEEP_EA_BtnPause";
+   if(ObjectFind(0, btnName) < 0)
+   {
+      ObjectCreate(0, btnName, OBJ_BUTTON, 0, 0, 0);
+      ObjectSetInteger(0, btnName, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+      ObjectSetInteger(0, btnName, OBJPROP_XDISTANCE, 20);
+      ObjectSetInteger(0, btnName, OBJPROP_YDISTANCE, 70);
+      ObjectSetInteger(0, btnName, OBJPROP_XSIZE, 180);
+      ObjectSetInteger(0, btnName, OBJPROP_YSIZE, 30);
+      ObjectSetInteger(0, btnName, OBJPROP_FONTSIZE, 9);
+      ObjectSetInteger(0, btnName, OBJPROP_SELECTABLE, false);
+   }
+
+   if(m_manualNewsPause)
+   {
+      ObjectSetString(0, btnName, OBJPROP_TEXT, "⚠️ NEWS PAUSED (Click)");
+      ObjectSetInteger(0, btnName, OBJPROP_BGCOLOR, clrCrimson);
+      ObjectSetInteger(0, btnName, OBJPROP_COLOR, clrWhite);
+   }
+   else
+   {
+      ObjectSetString(0, btnName, OBJPROP_TEXT, "🟢 ALGO ACTIVE (Click Pause)");
+      ObjectSetInteger(0, btnName, OBJPROP_BGCOLOR, clrDarkGreen);
+      ObjectSetInteger(0, btnName, OBJPROP_COLOR, clrWhite);
+   }
+   ChartRedraw(0);
+}
+
+//+------------------------------------------------------------------+
+//| Handle Chart Events (Button Clicks)                              |
+//+------------------------------------------------------------------+
+void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
+{
+   if(id == CHARTEVENT_OBJECT_CLICK && sparam == "SWEEP_EA_BtnPause")
+   {
+      m_manualNewsPause = !m_manualNewsPause;
+      PrintFormat("[EA NEWS TOGGLE] Algorithmic trading manually %s by user.", m_manualNewsPause ? "PAUSED (News Mode)" : "RESUMED");
+      UpdatePauseButton();
+   }
+}
+
+//+------------------------------------------------------------------+
 //| Expert initialization function                                   |
 //+------------------------------------------------------------------+
 int OnInit()
@@ -108,7 +230,9 @@ int OnInit()
    m_trade.SetMarginMode();
    m_trade.SetTypeFillingBySymbol(_Symbol);
 
-   Print("London_Sweep_NY_Reversal_EA v2.10 initialized on ", _Symbol, " Period: ", EnumToString(Period()));
+   UpdatePauseButton();
+
+   Print("London_Sweep_NY_Reversal_EA v2.20 initialized on ", _Symbol, " Period: ", EnumToString(Period()));
    return(INIT_SUCCEEDED);
 }
 
@@ -464,19 +588,38 @@ void OnTick()
 
    m_tradesTodayCount = CountTradesToday(dayStart);
 
+   // News Filter Checks
+   bool isNFP = IsNFPFriday(now);
+   bool isDateBlocked = IsDateBlacklisted(now, InpSkipDatesList);
+   string detectedNewsName = "";
+   bool isNewsNear = IsHighImpactUSDNewsNear(InpNewsBufferMins, detectedNewsName);
+
+   if(m_manualNewsPause)
+      m_newsStatusText = "PAUSED (Manual Button)";
+   else if(isNFP)
+      m_newsStatusText = "BLOCKED (NFP Jobs Friday)";
+   else if(isDateBlocked)
+      m_newsStatusText = "BLOCKED (Date Blacklisted)";
+   else if(isNewsNear)
+      m_newsStatusText = StringFormat("BLOCKED (%s)", detectedNewsName);
+   else
+      m_newsStatusText = "CLEAR (Trading Allowed)";
+
    // Live Status Dashboard
    string statusText = StringFormat(
-      "--- LONDON SWEEP & NY REVERSAL EA (%s) ---\n"
+      "--- LONDON SWEEP & NY REVERSAL EA (%s) v2.20 ---\n"
       "Broker Time: %02d:%02d:%02d | Window: %s - %s\n"
       "London Range: High=%.2f, Low=%.2f, Mid=%.2f (Size: %.1f pts)\n"
-      "Trades Today: %d / %d | Open Position: %s | Profit Lock: %s\n",
+      "Trades Today: %d / %d | Open Position: %s | Profit Lock: %s\n"
+      "News Shield: %s\n",
       _Symbol,
       dt.hour, dt.min, dt.sec,
       InpTradeStartTime, InpTradeEndTime,
       m_rangeHigh, m_rangeLow, m_rangeMid, (m_rangeHigh - m_rangeLow) / _Point,
       m_tradesTodayCount, InpMaxTradesPerDay,
       HasOpenPosition() ? "YES" : "NO",
-      (InpProfitLockType == LOCK_DISABLED) ? "OFF" : "ACTIVE"
+      (InpProfitLockType == LOCK_DISABLED) ? "OFF" : "ACTIVE",
+      m_newsStatusText
    );
    Comment(statusText);
 
@@ -487,9 +630,20 @@ void OnTick()
    if(m_tradesTodayCount >= InpMaxTradesPerDay) return;
    if(HasOpenPosition()) return;
 
+   // News Shield Check: Do NOT open new trades if blocked by news
+   if(m_manualNewsPause || isNFP || isDateBlocked || isNewsNear)
+   {
+      PrintFormat("[NEWS SHIELD ACTIVE] Trade skipped today: %s", m_newsStatusText);
+      return;
+   }
+
    // Spread filter
    long currentSpread = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD);
-   if(InpMaxSpreadPoints > 0 && currentSpread > InpMaxSpreadPoints) return;
+   if(InpMaxSpreadPoints > 0 && currentSpread > InpMaxSpreadPoints)
+   {
+      PrintFormat("[SPREAD GUARD] Current spread (%d pts) exceeds max allowed (%d pts). Trade skipped.", currentSpread, InpMaxSpreadPoints);
+      return;
+   }
 
    // Read bar 1 (just closed candle)
    double close1 = iClose(_Symbol, _Period, 1);
@@ -507,7 +661,7 @@ void OnTick()
    {
       double sweepDepth = (high1 - m_rangeHigh) / point;
       bool depthOk = (sweepDepth >= InpMinSweepPoints && sweepDepth <= InpMaxSweepPoints);
-      bool dispOk  = !InpRequireDispCandle || (close1 < open1); // Bearish candle
+      bool dispOk  = !InpRequireDispCandle || (close1 < open1);
 
       if(depthOk && dispOk)
       {
@@ -549,7 +703,7 @@ void OnTick()
    {
       double sweepDepth = (m_rangeLow - low1) / point;
       bool depthOk = (sweepDepth >= InpMinSweepPoints && sweepDepth <= InpMaxSweepPoints);
-      bool dispOk  = !InpRequireDispCandle || (close1 > open1); // Bullish candle
+      bool dispOk  = !InpRequireDispCandle || (close1 > open1);
 
       if(depthOk && dispOk)
       {
