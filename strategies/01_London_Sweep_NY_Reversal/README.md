@@ -2,6 +2,8 @@
 
 An institutional mean-reversion trading system designed for **XAUUSD (Gold)** that capitalizes on New York opening liquidity traps (fakeouts), enhanced with an intelligent **Dynamic Profit Lock Engine**.
 
+![London Liquidity Sweep & NY Reversal Strategy Diagram](assets/strategy_diagram.jpg)
+
 ---
 
 ## Performance Summary (13.5 Months / 80,000 M5 Candles on Vantage Markets)
@@ -82,6 +84,8 @@ We tested **9 different profit locking and trade management models** across 80,0
 ```text
 strategies/01_London_Sweep_NY_Reversal/
 ├── README.md                                  # Strategy rules and performance documentation
+├── assets/
+│   └── strategy_diagram.jpg                   # Visual chart flowchart and infographic
 ├── mql5/
 │   ├── London_Sweep_NY_Reversal_EA.mq5        # Fully automated Expert Advisor with Profit Lock Engine
 │   ├── London_Sweep_NY_Reversal_EA.ex5        # Compiled EA binary (Ready to trade in MT5)

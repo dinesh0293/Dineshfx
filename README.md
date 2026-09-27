@@ -10,6 +10,8 @@ A repository of institutional algorithmic trading strategies for **MetaTrader 5 
 | :---: | :--- | :---: | :---: | :--- | :---: | :---: | :---: | :---: |
 | **01** | [**London Liquidity Sweep & NY Reversal**](strategies/01_London_Sweep_NY_Reversal/) | **XAUUSD** | **M5** | Institutional Judas Swing / Mean Reversion to 50% Midpoint + Profit Lock | **38.5%** | **1.62** | **+70.9 R (+70.9%)** | **Production** |
 
+![London Liquidity Sweep & NY Reversal Strategy Overview](strategies/01_London_Sweep_NY_Reversal/assets/strategy_diagram.jpg)
+
 ---
 
 ## Repository Structure
@@ -21,6 +23,8 @@ Dineshfx/
 └── strategies/
     └── 01_London_Sweep_NY_Reversal/           # Production Strategy: Liquidity Sweep & Mean Reversion
         ├── README.md                          # Full strategy mechanics & backtest report
+        ├── assets/
+        │   └── strategy_diagram.jpg           # Strategy chart flowchart and infographic
         ├── mql5/                              # MetaTrader 5 source & compiled binaries
         │   ├── London_Sweep_NY_Reversal_EA.mq5
         │   ├── London_Sweep_NY_Reversal_EA.ex5
