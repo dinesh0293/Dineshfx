@@ -56,6 +56,18 @@ To safeguard trading capital from violent economic reprecussions on Gold (CPI, N
 
 ---
 
+## 2026 Q4 High-Impact News Blacklist (Pre-Loaded into EA)
+
+The following dates are pre-configured in `InpSkipDatesList` to automatically protect the account from CPI, NFP, and FOMC whipsaws:
+
+- **October 2026**: `Oct 02` (NFP), `Oct 12` (Bank Holiday), `Oct 14` (CPI), `Oct 29` (GDP)
+- **November 2026**: `Nov 04-05` (FOMC), `Nov 06` (NFP), `Nov 11` (Veterans Day), `Nov 12` (CPI), `Nov 26-27` (Thanksgiving / Black Friday)
+- **December 2026**: `Dec 04` (NFP), `Dec 10` (CPI), `Dec 15-16` (FOMC), `Dec 24-25` (Christmas), `Dec 31` (New Year's Eve)
+
+*On all other standard weekdays, the EA executes normal London Sweep & NY Reversals.*
+
+---
+
 ## Broker Time Synchronization (Vantage Markets & CPT Markets)
 
 Vantage Markets and CPT Markets MT5 servers run on **GMT+2 / GMT+3** (Cyprus server time, consistently **+7 hours ahead of New York EST**):

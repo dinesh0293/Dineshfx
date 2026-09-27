@@ -61,7 +61,7 @@ input group "=== News Protection & Event Filters ==="
 input bool                   InpFilterNFPFriday   = true;              // Auto-Block First Friday of Month (NFP Jobs Report)
 input bool                   InpFilterHighNews    = true;              // Auto-Filter MT5 High-Impact USD News
 input int                    InpNewsBufferMins    = 45;                // News Buffer Window (minutes before/after)
-input string                 InpSkipDatesList     = "";                // Blacklist Dates (e.g. "2026.09.30, 2026.10.14")
+input string                 InpSkipDatesList     = "2026.10.02, 2026.10.12, 2026.10.14, 2026.10.29, 2026.11.04, 2026.11.05, 2026.11.06, 2026.11.11, 2026.11.12, 2026.11.26, 2026.11.27, 2026.12.04, 2026.12.10, 2026.12.15, 2026.12.16, 2026.12.24, 2026.12.25, 2026.12.31"; // Blacklist Dates (Q4 2026 CPI/FOMC/Holidays)
 input bool                   InpShowNewsButton    = true;              // Show One-Click Pause Button on Chart
 
 input group "=== Risk & Money Management ==="

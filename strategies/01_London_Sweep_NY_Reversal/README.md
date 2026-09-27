@@ -102,7 +102,31 @@ We tested **9 different profit locking and trade management models** across 80,0
 - **The Solution**: This EA **does NOT need 24/7 hosting**.
   - It only trades during the **New York Opening Window (09:00 - 11:30 AM EST / 16:00 - 18:30 MT5 / 6:30 - 9:00 PM IST)**.
   - Simply open MT5 on your home laptop/PC during this 2.5-hour window (**$0 cost**).
-  - You keep **100% of the $236.85 profit**. Only invest in a paid VPS once account balance reaches $500+.
+## Trading Calendar (October – December 2026): When to Trade vs When to Skip
+
+Below is the definitive calendar schedule for the remainder of 2026. These dates are already pre-loaded into the EA's `InpSkipDatesList`:
+
+| Date | Day | Status | Reason & Event Description |
+| :--- | :--- | :---: | :--- |
+| **2026-10-02** | Friday | 🛑 **DO NOT TRADE** | **NFP (US Non-Farm Payrolls - 1st Friday of Month)** |
+| **2026-10-12** | Monday | 🛑 **DO NOT TRADE** | **US Columbus / Indigenous Peoples Day (Thin Bank Liquidity)** |
+| **2026-10-14** | Wednesday | 🛑 **DO NOT TRADE** | **US CPI (Inflation Data Release - 08:30 AM EST)** |
+| **2026-10-29** | Thursday | 🛑 **DO NOT TRADE** | **US Advance GDP Q3 Release** |
+| **2026-11-04** | Wednesday | 🛑 **DO NOT TRADE** | **FOMC Interest Rate Decision Day 1** |
+| **2026-11-05** | Thursday | 🛑 **DO NOT TRADE** | **FOMC Rate Decision & Fed Press Conference** |
+| **2026-11-06** | Friday | 🛑 **DO NOT TRADE** | **NFP (US Non-Farm Payrolls - 1st Friday of Month)** |
+| **2026-11-11** | Wednesday | 🛑 **DO NOT TRADE** | **US Veterans Day (US Bond Markets Closed)** |
+| **2026-11-12** | Thursday | 🛑 **DO NOT TRADE** | **US CPI (Inflation Data Release - 08:30 AM EST)** |
+| **2026-11-26** | Thursday | 🛑 **DO NOT TRADE** | **US Thanksgiving Day (US MARKETS CLOSED)** |
+| **2026-11-27** | Friday | 🛑 **DO NOT TRADE** | **Black Friday (Early Market Close / Illiquid)** |
+| **2026-12-04** | Friday | 🛑 **DO NOT TRADE** | **NFP (US Non-Farm Payrolls - 1st Friday of Month)** |
+| **2026-12-10** | Thursday | 🛑 **DO NOT TRADE** | **US CPI (Inflation Data Release - 08:30 AM EST)** |
+| **2026-12-15** | Tuesday | 🛑 **DO NOT TRADE** | **FOMC Meeting Day 1** |
+| **2026-12-16** | Wednesday | 🛑 **DO NOT TRADE** | **FOMC Rate Decision & Press Conference** |
+| **2026-12-24** | Thursday | 🛑 **DO NOT TRADE** | **Christmas Eve (Early Market Close)** |
+| **2026-12-25** | Friday | 🛑 **DO NOT TRADE** | **Christmas Day (MARKETS CLOSED)** |
+| **2026-12-31** | Thursday | 🛑 **DO NOT TRADE** | **New Year's Eve (Holiday Spread Spikes)** |
+| **All Other Weekdays** | Mon - Fri | 🟢 **TRADE NORMALLY** | **Clean London/NY Sessions (Highest win-rate days)** |
 
 ---
 
