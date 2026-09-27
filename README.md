@@ -35,6 +35,8 @@ Dineshfx/
     │       └── London_Sweep_NY_Reversal.pine
     └── 02_H1_OrderBlock_Swing/                # Production Strategy 02: H1 Institutional Order Block Swing Trader
         ├── README.md                          # Full swing strategy documentation & 20-mo backtest
+        ├── assets/
+        │   └── strategy_diagram.jpg           # Strategy chart flowchart and infographic
         ├── mql5/                              # MetaTrader 5 source & compiled binaries
         │   ├── H1_OrderBlock_Swing_EA.mq5     # Automated swing EA with partial profit engine
         │   ├── H1_OrderBlock_Swing_EA.ex5     # Compiled MT5 swing EA binary

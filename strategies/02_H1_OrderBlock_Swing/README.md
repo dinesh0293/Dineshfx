@@ -4,6 +4,8 @@ A high-probability institutional swing trading system for **Gold (XAUUSD)** base
 
 Inspired by multi-day swing holding mechanics, positioning with strict **0.01 micro-lots**, and booking **50% partial profit at +2.0R**.
 
+![H1 Institutional Order Block & Swing Strategy Diagram](assets/strategy_diagram.jpg)
+
 ---
 
 ## Performance Summary (10,000 H1 Candles / ~20 Months on Vantage Markets)
@@ -58,6 +60,8 @@ Unlike scalpers who stare at 1-minute charts, this swing strategy follows a rela
 ```text
 strategies/02_H1_OrderBlock_Swing/
 ├── README.md                                  # Full strategy documentation & backtest report
+├── assets/
+│   └── strategy_diagram.jpg                   # Visual chart flowchart and infographic
 ├── mql5/
 │   ├── H1_OrderBlock_Swing_EA.mq5             # Fully automated swing EA with 50% partial profit engine
 │   ├── H1_OrderBlock_Swing_EA.ex5             # Compiled MT5 EA binary
