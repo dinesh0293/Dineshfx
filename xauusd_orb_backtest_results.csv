@@ -1,0 +1,7 @@
+Config,Risk:Reward,Total Trades,Wins,Losses,Win Rate (%),Profit Factor,Total Net PnL (R),Net Return ($10k @ 1%),Max Drawdown (R),Expectancy / Trade
+London Range (04:00 - 08:55 EST / 11:00 - 15:55 Broker),1:1.5,222,83,139,37.39%,0.87,-18.1 R,"$-1,811 (-18.1%)",-28.7 R,-0.08 R
+London Range (04:00 - 08:55 EST / 11:00 - 15:55 Broker),1:2.0,222,73,149,32.88%,0.91,-12.9 R,"$-1,293 (-12.9%)",-18.2 R,-0.06 R
+London Range (04:00 - 08:55 EST / 11:00 - 15:55 Broker),1:2.5,222,67,155,30.18%,0.95,-8.1 R,$-806 (-8.1%),-22.0 R,-0.04 R
+Pre-Market Range (08:00 - 09:25 EST / 15:00 - 16:25 Broker),1:1.5,222,87,135,39.19%,0.95,-6.7 R,$-669 (-6.7%),-19.2 R,-0.03 R
+Pre-Market Range (08:00 - 09:25 EST / 15:00 - 16:25 Broker),1:2.0,222,80,142,36.04%,1.06,+8.5 R,$+855 (+8.5%),-14.9 R,+0.04 R
+Pre-Market Range (08:00 - 09:25 EST / 15:00 - 16:25 Broker),1:2.5,222,71,151,31.98%,1.02,+3.0 R,$+301 (+3.0%),-24.4 R,+0.01 R
