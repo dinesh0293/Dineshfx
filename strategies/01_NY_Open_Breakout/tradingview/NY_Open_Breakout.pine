@@ -4,13 +4,17 @@ indicator("NY Open (9:30 AM EST) Breakout Strategy [Dineshfx]", shorttitle="NY O
 //==============================================================================
 // INPUTS & SETTINGS
 //==============================================================================
-grp_sess = "Session Configuration (New York Time)"
-i_sess_preset = input.string("London (03:00 - 09:30)", "Earlier Session Range", options=["London (03:00 - 09:30)", "Asian + London (00:00 - 09:30)", "Pre-Market Only (08:00 - 09:30)"], group=grp_sess, tooltip="Select which earlier session high/low to mark as the breakout box. Default is the full London session (03:00 - 09:30 EST).")
-i_trade_sess  = input.session("0930-1030:23456", "NY Open Trade Window", group=grp_sess, tooltip="Entry window starting right at 9:30 AM NYSE open")
-i_tz          = input.string("America/New_York", "Timezone", group=grp_sess)
+grp_sess = "Session Timing Configuration"
+i_sess_preset = input.string("London -> 5 min before NY (03:00 - 08:55)", "Session Mode", 
+     options=["London -> 5 min before NY (03:00 - 08:55)", "London -> NYSE Bell (03:00 - 09:25)", "Pre-Market Only (08:00 - 08:55)", "Custom"], 
+     group=grp_sess, tooltip="Select session preset. Default ends at 08:55 (5 mins before 09:00 NY session) matching London High/Low.")
+
+i_custom_range = input.session("0300-0855:23456", "Custom Range Session (End 5 min before NY)", group=grp_sess)
+i_custom_trade = input.session("0900-1030:23456", "Custom NY Trade Window (Breakout Window)", group=grp_sess)
+i_tz           = input.string("America/New_York", "Timezone", group=grp_sess)
 
 grp_mark = "High / Low Price Markings"
-i_show_hl_lines = input.bool(true, "Show High & Low Level Lines", group=grp_mark)
+i_show_hl_lines = input.bool(true, "Show High & Low Level Extension Lines", group=grp_mark)
 i_show_hl_labels = input.bool(true, "Show High & Low Price Tags", group=grp_mark)
 i_show_mid_line  = input.bool(true, "Show 50% Midpoint Line", group=grp_mark)
 
@@ -33,11 +37,29 @@ i_show_dash   = input.bool(true, "Show Status Dashboard Table", group=grp_vis)
 //==============================================================================
 // SESSION & TIME DETECTION
 //==============================================================================
-string range_sess_str = i_sess_preset == "Asian + London (00:00 - 09:30)" ? "0000-0930:23456" : (i_sess_preset == "Pre-Market Only (08:00 - 09:30)" ? "0800-0930:23456" : "0300-0930:23456")
-string sess_short_title = i_sess_preset == "Asian + London (00:00 - 09:30)" ? "ASIA+LDN" : (i_sess_preset == "Pre-Market Only (08:00 - 09:30)" ? "PRE-NY" : "LONDON")
+string range_sess_str = ""
+string trade_sess_str = ""
+string sess_short_title = ""
+
+if i_sess_preset == "London -> 5 min before NY (03:00 - 08:55)"
+    range_sess_str   := "0300-0855:23456"
+    trade_sess_str   := "0900-1030:23456"
+    sess_short_title := "LONDON"
+else if i_sess_preset == "London -> NYSE Bell (03:00 - 09:25)"
+    range_sess_str   := "0300-0925:23456"
+    trade_sess_str   := "0930-1030:23456"
+    sess_short_title := "LONDON"
+else if i_sess_preset == "Pre-Market Only (08:00 - 08:55)"
+    range_sess_str   := "0800-0855:23456"
+    trade_sess_str   := "0900-1030:23456"
+    sess_short_title := "PRE-NY"
+else // Custom
+    range_sess_str   := i_custom_range
+    trade_sess_str   := i_custom_trade
+    sess_short_title := "RANGE"
 
 in_range_session = not na(time(timeframe.period, range_sess_str, i_tz))
-in_trade_session = not na(time(timeframe.period, i_trade_sess, i_tz))
+in_trade_session = not na(time(timeframe.period, trade_sess_str, i_tz))
 
 // Current New York Calendar Day
 t_day = dayofmonth(time, i_tz)
@@ -46,8 +68,11 @@ var int last_session_day = -1
 // Triggers on the first bar of the range session each day
 new_range_session = in_range_session and (t_day != last_session_day)
 
+// Detect when range session finishes (5 mins before NY Open)
+session_just_ended = not in_range_session and in_range_session[1]
+
 //==============================================================================
-// RANGE FORMATION & PRICE MARKINGS (Locked to exact chart time and price)
+// RANGE FORMATION & PRICE MARKINGS (Strictly ends 5 min before NY - Never crosses NY!)
 //==============================================================================
 var float range_high = na
 var float range_low  = na
@@ -60,6 +85,7 @@ var label high_lbl   = na
 var label low_lbl    = na
 var bool  trade_taken_today = false
 
+// Reset and start new box on London / Range open
 if new_range_session
     last_session_day := t_day
     range_high := high
@@ -67,7 +93,7 @@ if new_range_session
     range_start_time := time
     trade_taken_today := false
     
-    // Create new range box covering the earlier session
+    // Create new range box
     range_box := box.new(left=time, top=range_high, right=time_close, bottom=range_low,
                          xloc=xloc.bar_time, bgcolor=i_box_color, border_color=i_box_border,
                          border_style=line.style_solid, border_width=1)
@@ -84,16 +110,17 @@ if new_range_session
         high_lbl := label.new(time_close, range_high, sess_short_title + " HIGH: " + str.tostring(range_high, "#.##"), xloc=xloc.bar_time, color=i_high_color, textcolor=color.black, style=label.style_label_left, size=size.small)
         low_lbl  := label.new(time_close, range_low,  sess_short_title + " LOW: "  + str.tostring(range_low, "#.##"),  xloc=xloc.bar_time, color=i_low_color,  textcolor=color.white, style=label.style_label_left, size=size.small)
 
-// Update while forming the earlier session range box
+// ONLY update while in the range session (UP TO 5 MINS BEFORE NY OPEN)
 if in_range_session and not na(range_box)
     range_high := math.max(range_high, high)
     range_low  := math.min(range_low, low)
     float range_mid = (range_high + range_low) / 2.0
     
+    // Box expands strictly until 08:55 (5 mins before NY)
     box.set_top(range_box, range_high)
     box.set_bottom(range_box, range_low)
     box.set_right(range_box, time_close)
-    box.set_text(range_box, "  " + sess_short_title + " RANGE\n  High: " + str.tostring(range_high, "#.##") + "\n  Low:  " + str.tostring(range_low, "#.##"))
+    box.set_text(range_box, "  " + sess_short_title + " RANGE (Pre-NY)\n  High: " + str.tostring(range_high, "#.##") + "\n  Low:  " + str.tostring(range_low, "#.##"))
     box.set_text_color(range_box, color.white)
     box.set_text_size(range_box, size.small)
     box.set_text_halign(range_box, text.align_left)
@@ -120,20 +147,26 @@ if in_range_session and not na(range_box)
         label.set_xy(low_lbl, time_close, range_low)
         label.set_text(low_lbl, sess_short_title + " LOW: " + str.tostring(range_low, "#.##"))
 
-// Extend High & Low levels into the New York trade window for visual reference
-var bool session_just_ended = false
-session_just_ended := not in_range_session and in_range_session[1]
-if session_just_ended and i_show_hl_lines and not na(high_line) and not na(low_line)
-    int ext_time = time + (12 * 5 * 60 * 1000) // Extend 1 hour into NY session
-    line.set_x2(high_line, ext_time)
-    line.set_x2(low_line, ext_time)
-    if not na(high_lbl)
-        label.set_x(high_lbl, ext_time)
-    if not na(low_lbl)
-        label.set_x(low_lbl, ext_time)
+// FREEZE BOX PERMANENTLY when range session ends (5 mins before NY)
+// The box NEVER crosses into the NY session!
+if session_just_ended and not na(range_box)
+    // Freeze right edge of box permanently at the last pre-NY bar
+    box.set_right(range_box, time)
+    
+    // Extend High & Low dashed lines into NY session so you can see breakouts clearly
+    if i_show_hl_lines and not na(high_line) and not na(low_line)
+        int ext_time = time + (12 * 5 * 60 * 1000) // Extend 1 hour into NY
+        line.set_x2(high_line, ext_time)
+        line.set_x2(low_line, ext_time)
+        line.set_style(high_line, line.style_dashed)
+        line.set_style(low_line, line.style_dashed)
+        if not na(high_lbl)
+            label.set_x(high_lbl, ext_time)
+        if not na(low_lbl)
+            label.set_x(low_lbl, ext_time)
 
 //==============================================================================
-// BREAKOUT DETECTION & SIGNALS
+// BREAKOUT DETECTION & SIGNALS (During New York Session)
 //==============================================================================
 buy_signal  = false
 sell_signal = false
@@ -145,7 +178,7 @@ var string last_signal_str = "None"
 
 // Evaluate breakout on confirmed bar close during the trade window
 if in_trade_session and not trade_taken_today and not na(range_high) and not na(range_low) and barstate.isconfirmed
-    // Bullish Breakout: First confirmed candle closing strictly above earlier session high
+    // Bullish Breakout: First confirmed candle closing strictly above London high
     if close > range_high
         buy_signal := true
         trade_taken_today := true
@@ -180,7 +213,7 @@ if in_trade_session and not trade_taken_today and not na(range_high) and not na(
             line.new(time, active_tp, proj_time, active_tp, xloc=xloc.bar_time, color=color.green, width=2, style=line.style_dashed)
             label.new(proj_time, active_tp, "TP (1:" + str.tostring(i_rr) + "): " + str.tostring(active_tp, "#.##"), xloc=xloc.bar_time, color=color.green, textcolor=color.white, style=label.style_label_left, size=size.small)
 
-    // Bearish Breakout: First confirmed candle closing strictly below earlier session low
+    // Bearish Breakout: First confirmed candle closing strictly below London low
     else if close < range_low
         sell_signal := true
         trade_taken_today := true
