@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2026, Dineshfx"
 #property link      "https://github.com/dinesh0293/Dineshfx"
-#property version   "1.10"
+#property version   "1.20"
 #property indicator_chart_window
 #property indicator_buffers 2
 #property indicator_plots   2
@@ -23,19 +23,19 @@
 //--- Inputs
 input group "=== Swing & Order Block Parameters ==="
 input int    InpPivotSpan             = 8;              // Swing Pivot Span (bars)
-input int    InpMinDisplacementPoints = 800;            // Min Displacement ($8.00 = 800 pts on Gold)
-input bool   InpRequireDailyTrend     = true;           // Filter by Daily 50 EMA Trend
+input double InpMinDisplacementPoints = 800;            // Min Displacement ($8.00 = 800 pts on Gold)
+input bool   InpRequireDailyTrend     = false;          // Filter by Daily 50 EMA Trend (false = all H1 OBs)
 input int    InpDailyEMAPeriod        = 50;             // Daily EMA Period
-input int    InpSLBufferPoints        = 200;            // SL Buffer beyond swing wick ($2.00 = 200 pts)
+input double InpSLBufferPoints        = 200;            // SL Buffer beyond swing wick ($2.00 = 200 pts)
 
 input group "=== Visuals & Clean Display ==="
-input bool   InpShowOnlyUnmitigated   = true;           // Show ONLY Active / Fresh Blocks (Prevents Screen Clutter!)
-input int    InpMaxActiveBlocks       = 2;              // Max Active Blocks to Display (Per Direction)
+input bool   InpShowMitigatedBoxes    = true;           // Show Past Mitigated Blocks (Truncated at Retest)
 input bool   InpFillBoxes             = false;          // Fill Rectangles (false = Clean outline borders, NO screen blinding)
 input int    InpBoxBorderWidth        = 2;              // Box Border Width
-input color  InpColorBearishOB        = clrGold;        // Bearish Order Block Border Color
-input color  InpColorBullishOB        = clrMediumSeaGreen; // Bullish Order Block Border Color
+input color  InpColorBearishOB        = clrGold;        // Bearish Order Block Color
+input color  InpColorBullishOB        = clrMediumSeaGreen; // Bullish Order Block Color
 input bool   InpShowLabels            = true;           // Show OB & SL Text Labels
+input int    InpMaxHistoryBars        = 300;            // Historical Bars to Scan
 
 //--- Buffers
 double BufferBullish[];
@@ -58,7 +58,7 @@ int OnInit()
    ArraySetAsSeries(BufferBullish, true);
    ArraySetAsSeries(BufferBearish, true);
 
-   // Wipe all old boxes from chart to ensure pristine clean screen
+   // Wipe any old objects from chart to guarantee pristine display
    ObjectsDeleteAll(0, "H1_OB_");
    ObjectsDeleteAll(0, "H1_EA_OB_");
 
@@ -67,7 +67,7 @@ int OnInit()
       m_dailyEmaHandle = iMA(_Symbol, PERIOD_D1, InpDailyEMAPeriod, 0, MODE_EMA, PRICE_CLOSE);
    }
 
-   Print("H1_OrderBlock_Swing_Indicator initialized cleanly on ", _Symbol, " Period: ", EnumToString(Period()));
+   Print("H1_OrderBlock_Swing_Indicator v1.20 initialized cleanly on ", _Symbol);
    return(INIT_SUCCEEDED);
 }
 
@@ -98,9 +98,11 @@ void DrawOrderBlock(string name, datetime tStart, datetime tEnd, double top, dou
    }
    else
    {
+      ObjectSetInteger(0, name, OBJPROP_TIME, 0, tStart);
       ObjectSetInteger(0, name, OBJPROP_TIME, 1, tEnd);
       ObjectSetDouble(0, name, OBJPROP_PRICE, 0, top);
       ObjectSetDouble(0, name, OBJPROP_PRICE, 1, bottom);
+      ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
       ObjectSetInteger(0, name, OBJPROP_FILL, InpFillBoxes);
       ObjectSetInteger(0, name, OBJPROP_WIDTH, InpBoxBorderWidth);
    }
@@ -126,8 +128,10 @@ void DrawOrderBlockLabel(string name, datetime tStart, double price, string text
    }
    else
    {
+      ObjectSetInteger(0, name, OBJPROP_TIME, 0, tStart);
       ObjectSetDouble(0, name, OBJPROP_PRICE, 0, price);
       ObjectSetString(0, name, OBJPROP_TEXT, text);
+      ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
    }
 }
 
@@ -153,16 +157,13 @@ int OnCalculate(const int rates_total,
    ArraySetAsSeries(low, true);
    ArraySetAsSeries(close, true);
 
-   // Only full redraw on new bar or first run to keep MT5 silky smooth
    datetime currentBarTime = time[0];
    bool isNewBar = (currentBarTime != m_lastCalcTime);
    if(!isNewBar && prev_calculated > 0) return(rates_total);
    m_lastCalcTime = currentBarTime;
 
-   // Clean up any old OB objects
    ObjectsDeleteAll(0, "H1_OB_");
 
-   // Initialize buffers
    ArrayInitialize(BufferBullish, EMPTY_VALUE);
    ArrayInitialize(BufferBearish, EMPTY_VALUE);
 
@@ -171,168 +172,175 @@ int OnCalculate(const int rates_total,
    double slBuf   = InpSLBufferPoints * point;
    double dailyEma[1];
 
-   int scanDepth = MathMin(rates_total - InpPivotSpan * 2, 400); // Check recent 400 bars
-   int countBearishDrawn = 0;
-   int countBullishDrawn = 0;
+   int scanLimit = MathMin(rates_total - InpPivotSpan * 2, InpMaxHistoryBars);
 
-   // Scan from recent bars to older bars
-   for(int i = 1; i <= scanDepth; i++)
+   for(int pIdx = InpPivotSpan; pIdx <= scanLimit; pIdx++)
    {
-      int pIdx = i + InpPivotSpan;
-      if(pIdx + InpPivotSpan >= rates_total) break;
+      // -------------------------------------------------------------
+      // 1. Check for Bearish Order Block
+      // -------------------------------------------------------------
+      double pivotHigh = high[pIdx];
+      bool isSwingHigh = true;
 
-      // -------------------------------------------------------------
-      // 1. Check for Bearish Order Block (Swing High + Displacement)
-      // -------------------------------------------------------------
-      if(countBearishDrawn < InpMaxActiveBlocks)
+      for(int k = 1; k <= InpPivotSpan; k++)
       {
-         bool isSwingHigh = true;
-         double pivotHigh = high[pIdx];
-
-         for(int k = 1; k <= InpPivotSpan; k++)
+         if(high[pIdx - k] >= pivotHigh || high[pIdx + k] >= pivotHigh)
          {
-            if(high[pIdx - k] >= pivotHigh || high[pIdx + k] >= pivotHigh)
-            {
-               isSwingHigh = false;
-               break;
-            }
+            isSwingHigh = false;
+            break;
+         }
+      }
+
+      if(isSwingHigh)
+      {
+         double dropLow = low[pIdx - 1];
+         for(int d = 2; d <= 4; d++)
+         {
+            if(pIdx - d >= 0 && low[pIdx - d] < dropLow)
+               dropLow = low[pIdx - d];
          }
 
-         if(isSwingHigh)
+         if((pivotHigh - dropLow) >= minDisp)
          {
-            double dropLow = low[pIdx - 1];
-            for(int d = 2; d <= 4; d++)
+            bool trendOk = true;
+            if(InpRequireDailyTrend && m_dailyEmaHandle != INVALID_HANDLE)
             {
-               if(pIdx - d >= 0 && low[pIdx - d] < dropLow)
-                  dropLow = low[pIdx - d];
+               if(CopyBuffer(m_dailyEmaHandle, 0, time[pIdx], 1, dailyEma) > 0)
+               {
+                  if(close[pIdx] > dailyEma[0]) trendOk = false;
+               }
             }
 
-            if((pivotHigh - dropLow) >= minDisp)
+            if(trendOk)
             {
-               bool trendOk = true;
-               if(InpRequireDailyTrend && m_dailyEmaHandle != INVALID_HANDLE)
+               double obTop = pivotHigh;
+               double obBottom = MathMin(open[pIdx], close[pIdx]);
+               double slPrice = pivotHigh + slBuf;
+
+               // Find departure bar (where price left the box downwards)
+               int depBar = -1;
+               for(int d = 1; d <= 4; d++)
                {
-                  if(CopyBuffer(m_dailyEmaHandle, 0, time[pIdx], 1, dailyEma) > 0)
+                  if(pIdx - d >= 0 && close[pIdx - d] < obBottom)
                   {
-                     if(close[pIdx] > dailyEma[0]) trendOk = false;
+                     depBar = pIdx - d;
+                     break;
                   }
                }
 
-               if(trendOk)
+               bool isMitigated = false;
+               datetime tEnd = time[0] + (PeriodSeconds() * 15);
+
+               if(depBar != -1)
                {
-                  double obTop = pivotHigh;
-                  double obBottom = MathMin(open[pIdx], close[pIdx]);
-                  double slPrice = pivotHigh + slBuf;
-
-                  // Check Mitigation: Has any subsequent bar entered the OB zone?
-                  bool isMitigated = false;
-                  datetime tEnd = time[0] + (PeriodSeconds() * 15);
-
-                  for(int m = pIdx - 1; m >= 1; m--)
+                  for(int m = depBar - 1; m >= 0; m--)
                   {
                      if(high[m] >= obBottom)
                      {
                         isMitigated = true;
-                        tEnd = time[m]; // Truncate at mitigation bar
+                        tEnd = time[m]; // Truncate cleanly at retest
                         break;
                      }
                   }
+               }
 
-                  // If showing only unmitigated blocks, skip already touched blocks
-                  if(!isMitigated || !InpShowOnlyUnmitigated)
-                  {
-                     datetime tStart = time[pIdx];
-                     string obName = StringFormat("H1_OB_SELL_%s", TimeToString(tStart, TIME_DATE|TIME_MINUTES));
-                     DrawOrderBlock(obName, tStart, tEnd, obTop, obBottom, InpColorBearishOB);
+               if(!isMitigated || InpShowMitigatedBoxes)
+               {
+                  datetime tStart = time[pIdx];
+                  string obName = StringFormat("H1_OB_SELL_%s", TimeToString(tStart, TIME_DATE|TIME_MINUTES));
+                  DrawOrderBlock(obName, tStart, tEnd, obTop, obBottom, InpColorBearishOB);
 
-                     string labelText = StringFormat("H1 SELL OB | SL: %.2f", slPrice);
-                     DrawOrderBlockLabel(obName + "_TXT", tStart, pivotHigh + (40 * point), labelText, InpColorBearishOB);
+                  string labelText = StringFormat("H1 SELL OB | SL: %.2f", slPrice);
+                  DrawOrderBlockLabel(obName + "_TXT", tStart, pivotHigh + (40 * point), labelText, InpColorBearishOB);
 
-                     BufferBearish[pIdx] = pivotHigh + (50 * point);
-                     countBearishDrawn++;
-                  }
+                  BufferBearish[pIdx] = pivotHigh + (50 * point);
                }
             }
          }
       }
 
       // -------------------------------------------------------------
-      // 2. Check for Bullish Order Block (Swing Low + Displacement)
+      // 2. Check for Bullish Order Block
       // -------------------------------------------------------------
-      if(countBullishDrawn < InpMaxActiveBlocks)
-      {
-         bool isSwingLow = true;
-         double pivotLow = low[pIdx];
+      double pivotLow = low[pIdx];
+      bool isSwingLow = true;
 
-         for(int k = 1; k <= InpPivotSpan; k++)
+      for(int k = 1; k <= InpPivotSpan; k++)
+      {
+         if(low[pIdx - k] <= pivotLow || low[pIdx + k] <= pivotLow)
          {
-            if(low[pIdx - k] <= pivotLow || low[pIdx + k] <= pivotLow)
-            {
-               isSwingLow = false;
-               break;
-            }
+            isSwingLow = false;
+            break;
+         }
+      }
+
+      if(isSwingLow)
+      {
+         double rallyHigh = high[pIdx - 1];
+         for(int d = 2; d <= 4; d++)
+         {
+            if(pIdx - d >= 0 && high[pIdx - d] > rallyHigh)
+               rallyHigh = high[pIdx - d];
          }
 
-         if(isSwingLow)
+         if((rallyHigh - pivotLow) >= minDisp)
          {
-            double rallyHigh = high[pIdx - 1];
-            for(int d = 2; d <= 4; d++)
+            bool trendOk = true;
+            if(InpRequireDailyTrend && m_dailyEmaHandle != INVALID_HANDLE)
             {
-               if(pIdx - d >= 0 && high[pIdx - d] > rallyHigh)
-                  rallyHigh = high[pIdx - d];
+               if(CopyBuffer(m_dailyEmaHandle, 0, time[pIdx], 1, dailyEma) > 0)
+               {
+                  if(close[pIdx] < dailyEma[0]) trendOk = false;
+               }
             }
 
-            if((rallyHigh - pivotLow) >= minDisp)
+            if(trendOk)
             {
-               bool trendOk = true;
-               if(InpRequireDailyTrend && m_dailyEmaHandle != INVALID_HANDLE)
+               double obTop = MathMax(open[pIdx], close[pIdx]);
+               double obBottom = pivotLow;
+               double slPrice = pivotLow - slBuf;
+
+               // Find departure bar (where price left the box upwards)
+               int depBar = -1;
+               for(int d = 1; d <= 4; d++)
                {
-                  if(CopyBuffer(m_dailyEmaHandle, 0, time[pIdx], 1, dailyEma) > 0)
+                  if(pIdx - d >= 0 && close[pIdx - d] > obTop)
                   {
-                     if(close[pIdx] < dailyEma[0]) trendOk = false;
+                     depBar = pIdx - d;
+                     break;
                   }
                }
 
-               if(trendOk)
+               bool isMitigated = false;
+               datetime tEnd = time[0] + (PeriodSeconds() * 15);
+
+               if(depBar != -1)
                {
-                  double obTop = MathMax(open[pIdx], close[pIdx]);
-                  double obBottom = pivotLow;
-                  double slPrice = pivotLow - slBuf;
-
-                  // Check Mitigation: Has any subsequent bar entered the OB zone?
-                  bool isMitigated = false;
-                  datetime tEnd = time[0] + (PeriodSeconds() * 15);
-
-                  for(int m = pIdx - 1; m >= 1; m--)
+                  for(int m = depBar - 1; m >= 0; m--)
                   {
                      if(low[m] <= obTop)
                      {
                         isMitigated = true;
-                        tEnd = time[m]; // Truncate at mitigation bar
+                        tEnd = time[m]; // Truncate cleanly at retest
                         break;
                      }
                   }
+               }
 
-                  if(!isMitigated || !InpShowOnlyUnmitigated)
-                  {
-                     datetime tStart = time[pIdx];
-                     string obName = StringFormat("H1_OB_BUY_%s", TimeToString(tStart, TIME_DATE|TIME_MINUTES));
-                     DrawOrderBlock(obName, tStart, tEnd, obTop, obBottom, InpColorBullishOB);
+               if(!isMitigated || InpShowMitigatedBoxes)
+               {
+                  datetime tStart = time[pIdx];
+                  string obName = StringFormat("H1_OB_BUY_%s", TimeToString(tStart, TIME_DATE|TIME_MINUTES));
+                  DrawOrderBlock(obName, tStart, tEnd, obTop, obBottom, InpColorBullishOB);
 
-                     string labelText = StringFormat("H1 BUY OB | SL: %.2f", slPrice);
-                     DrawOrderBlockLabel(obName + "_TXT", tStart, pivotLow - (40 * point), labelText, InpColorBullishOB);
+                  string labelText = StringFormat("H1 BUY OB | SL: %.2f", slPrice);
+                  DrawOrderBlockLabel(obName + "_TXT", tStart, pivotLow - (40 * point), labelText, InpColorBullishOB);
 
-                     BufferBullish[pIdx] = pivotLow - (50 * point);
-                     countBullishDrawn++;
-                  }
+                  BufferBullish[pIdx] = pivotLow - (50 * point);
                }
             }
          }
       }
-
-      // If we have found the desired number of active blocks, stop scanning older bars
-      if(countBearishDrawn >= InpMaxActiveBlocks && countBullishDrawn >= InpMaxActiveBlocks)
-         break;
    }
 
    ChartRedraw(0);
