@@ -30,7 +30,7 @@ input ulong  InpMagicNumber           = 5502026;        // Magic Number
 input string InpTradeComment          = "H1_OB_SWING";  // Trade Comment
 
 input group "=== Visuals ==="
-input bool   InpDrawBoxes             = true;           // Draw Order Block Rectangles
+input bool   InpDrawBoxes             = false;           // Draw Order Block Rectangles
 input color  InpColorBearishOB        = clrYellow;      // Bearish Order Block Color (The Yellow Box)
 input color  InpColorBullishOB        = clrMediumSeaGreen; // Bullish Order Block Color
 
@@ -94,7 +94,8 @@ void DrawOBBox(string name, datetime tStart, datetime tEnd, double top, double b
       ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
       ObjectSetInteger(0, name, OBJPROP_STYLE, STYLE_SOLID);
       ObjectSetInteger(0, name, OBJPROP_WIDTH, 1);
-      ObjectSetInteger(0, name, OBJPROP_FILL, true);
+      ObjectSetInteger(0, name, OBJPROP_FILL, false);
+      ObjectSetInteger(0, name, OBJPROP_WIDTH, 2);
       ObjectSetInteger(0, name, OBJPROP_BACK, true);
       ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
    }
