@@ -13,6 +13,7 @@
 
 //--- Inputs
 input group "=== Swing & Order Block Detection ==="
+input ENUM_TIMEFRAMES InpStrategyTimeframe   = PERIOD_H1;      // Strategy Execution Timeframe (Locked to H1)
 input int    InpPivotSpan             = 8;              // Swing Pivot Span (bars)
 input int    InpMinDisplacementPoints = 800;            // Min Displacement ($8.00 = 800 pts on Gold)
 input bool   InpRequireDailyTrend     = true;           // Filter by Daily 50 EMA Trend
@@ -228,7 +229,7 @@ void OnTick()
 {
    ManageOpenSwingTrades();
 
-   datetime currentBarTime = iTime(_Symbol, _Period, 0);
+   datetime currentBarTime = iTime(_Symbol, InpStrategyTimeframe, 0);
    bool isNewBar = (currentBarTime != m_lastBarTime);
    if(isNewBar)
    {
@@ -278,12 +279,12 @@ void OnTick()
 
    // Check if a swing high occurred at bar InpPivotSpan
    int checkIdx = InpPivotSpan;
-   double checkHigh = iHigh(_Symbol, _Period, checkIdx);
+   double checkHigh = iHigh(_Symbol, InpStrategyTimeframe, checkIdx);
    bool isSwingHigh = true;
 
    for(int k = 1; k <= InpPivotSpan; k++)
    {
-      if(iHigh(_Symbol, _Period, checkIdx - k) >= checkHigh || iHigh(_Symbol, _Period, checkIdx + k) >= checkHigh)
+      if(iHigh(_Symbol, InpStrategyTimeframe, checkIdx - k) >= checkHigh || iHigh(_Symbol, InpStrategyTimeframe, checkIdx + k) >= checkHigh)
       {
          isSwingHigh = false;
          break;
@@ -294,11 +295,11 @@ void OnTick()
 
    if(isSwingHigh && dailyTrendDown)
    {
-      double dropLow = iLow(_Symbol, _Period, checkIdx - 1);
+      double dropLow = iLow(_Symbol, InpStrategyTimeframe, checkIdx - 1);
       for(int d = 2; d <= 4; d++)
       {
-         if(checkIdx - d >= 0 && iLow(_Symbol, _Period, checkIdx - d) < dropLow)
-            dropLow = iLow(_Symbol, _Period, checkIdx - d);
+         if(checkIdx - d >= 0 && iLow(_Symbol, InpStrategyTimeframe, checkIdx - d) < dropLow)
+            dropLow = iLow(_Symbol, InpStrategyTimeframe, checkIdx - d);
       }
 
       if((checkHigh - dropLow) >= minDisp)
@@ -307,24 +308,24 @@ void OnTick()
          ArrayResize(m_activeOBs, sz + 1);
          m_activeOBs[sz].active = true;
          m_activeOBs[sz].type = "BEARISH";
-         m_activeOBs[sz].time = iTime(_Symbol, _Period, checkIdx);
+         m_activeOBs[sz].time = iTime(_Symbol, InpStrategyTimeframe, checkIdx);
          m_activeOBs[sz].top = checkHigh;
-         m_activeOBs[sz].bottom = MathMin(iOpen(_Symbol, _Period, checkIdx), iClose(_Symbol, _Period, checkIdx));
+         m_activeOBs[sz].bottom = MathMin(iOpen(_Symbol, InpStrategyTimeframe, checkIdx), iClose(_Symbol, InpStrategyTimeframe, checkIdx));
          m_activeOBs[sz].sl = checkHigh + (InpSLBufferPoints * point);
 
          string obName = StringFormat("H1_EA_OB_SELL_%s", TimeToString(m_activeOBs[sz].time, TIME_DATE|TIME_MINUTES));
-         DrawOBBox(obName, m_activeOBs[sz].time, currentBarTime + (PeriodSeconds() * 24), m_activeOBs[sz].top, m_activeOBs[sz].bottom, InpColorBearishOB);
+         DrawOBBox(obName, m_activeOBs[sz].time, currentBarTime + (PeriodSeconds(InpStrategyTimeframe) * 24), m_activeOBs[sz].top, m_activeOBs[sz].bottom, InpColorBearishOB);
          Print("[H1 SWING] New Bearish Order Block detected: ", obName);
       }
    }
 
    // Check if a swing low occurred at bar InpPivotSpan
-   double checkLow = iLow(_Symbol, _Period, checkIdx);
+   double checkLow = iLow(_Symbol, InpStrategyTimeframe, checkIdx);
    bool isSwingLow = true;
 
    for(int k = 1; k <= InpPivotSpan; k++)
    {
-      if(iLow(_Symbol, _Period, checkIdx - k) <= checkLow || iLow(_Symbol, _Period, checkIdx + k) <= checkLow)
+      if(iLow(_Symbol, InpStrategyTimeframe, checkIdx - k) <= checkLow || iLow(_Symbol, InpStrategyTimeframe, checkIdx + k) <= checkLow)
       {
          isSwingLow = false;
          break;
@@ -333,11 +334,11 @@ void OnTick()
 
    if(isSwingLow && dailyTrendUp)
    {
-      double rallyHigh = iHigh(_Symbol, _Period, checkIdx - 1);
+      double rallyHigh = iHigh(_Symbol, InpStrategyTimeframe, checkIdx - 1);
       for(int d = 2; d <= 4; d++)
       {
-         if(checkIdx - d >= 0 && iHigh(_Symbol, _Period, checkIdx - d) > rallyHigh)
-            rallyHigh = iHigh(_Symbol, _Period, checkIdx - d);
+         if(checkIdx - d >= 0 && iHigh(_Symbol, InpStrategyTimeframe, checkIdx - d) > rallyHigh)
+            rallyHigh = iHigh(_Symbol, InpStrategyTimeframe, checkIdx - d);
       }
 
       if((rallyHigh - checkLow) >= minDisp)
@@ -346,13 +347,13 @@ void OnTick()
          ArrayResize(m_activeOBs, sz + 1);
          m_activeOBs[sz].active = true;
          m_activeOBs[sz].type = "BULLISH";
-         m_activeOBs[sz].time = iTime(_Symbol, _Period, checkIdx);
-         m_activeOBs[sz].top = MathMax(iOpen(_Symbol, _Period, checkIdx), iClose(_Symbol, _Period, checkIdx));
+         m_activeOBs[sz].time = iTime(_Symbol, InpStrategyTimeframe, checkIdx);
+         m_activeOBs[sz].top = MathMax(iOpen(_Symbol, InpStrategyTimeframe, checkIdx), iClose(_Symbol, InpStrategyTimeframe, checkIdx));
          m_activeOBs[sz].bottom = checkLow;
          m_activeOBs[sz].sl = checkLow - (InpSLBufferPoints * point);
 
          string obName = StringFormat("H1_EA_OB_BUY_%s", TimeToString(m_activeOBs[sz].time, TIME_DATE|TIME_MINUTES));
-         DrawOBBox(obName, m_activeOBs[sz].time, currentBarTime + (PeriodSeconds() * 24), m_activeOBs[sz].top, m_activeOBs[sz].bottom, InpColorBullishOB);
+         DrawOBBox(obName, m_activeOBs[sz].time, currentBarTime + (PeriodSeconds(InpStrategyTimeframe) * 24), m_activeOBs[sz].top, m_activeOBs[sz].bottom, InpColorBullishOB);
          Print("[H1 SWING] New Bullish Order Block detected: ", obName);
       }
    }
@@ -360,8 +361,8 @@ void OnTick()
    // Execution: Check for retests of unmitigated Order Blocks
    if(openCount >= InpMaxOpenTrades) return;
 
-   double high1 = iHigh(_Symbol, _Period, 1);
-   double low1  = iLow(_Symbol, _Period, 1);
+   double high1 = iHigh(_Symbol, InpStrategyTimeframe, 1);
+   double low1  = iLow(_Symbol, InpStrategyTimeframe, 1);
 
    for(int i = ArraySize(m_activeOBs) - 1; i >= 0; i--)
    {
