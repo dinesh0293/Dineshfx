@@ -77,6 +77,17 @@ Below is the step-by-step visual roadmap of how this strategy executes a single 
    - Order 2 reaches the major structural support target and closes for **+$115.00 profit**.
    - **Total Weekly Result**: **+$137.00 Net Gain (+137% account return in 3 days on a $100 account)**.
 
+## EA Versions Available
+
+1. **Standard Version (`H1_OrderBlock_Swing_EA`)**:
+   - Single position at a time (Max: 1).
+   - Conservative execution with 50% partial close at +2.0R and move to Break-Even.
+   - Magic Number: `5502026`.
+2. **Pro Pyramid Version (`H1_OrderBlock_Pyramid_EA`)**:
+   - **Option 2 (Continuation OB Trailing Shield)**: Trails Stop Loss behind every newly confirmed H1 Order Block once in profit $\ge +1.5R$.
+   - **Option 3 (Risk-Free Pyramiding)**: Stacks a 2nd `0.01 lot` position on continuation Order Block retests *only* after Trade 1 has already locked in Break-Even ($0 risk).
+   - Magic Number: `5502027`.
+
 ---
 
 ## File Structure
@@ -88,13 +99,16 @@ strategies/02_H1_OrderBlock_Swing/
 │   ├── strategy_diagram.jpg                   # Visual chart flowchart and core mechanics
 │   └── weekly_walkthrough.jpg                 # Full 1-week swing trade execution walkthrough
 ├── mql5/
-│   ├── H1_OrderBlock_Swing_EA.mq5             # Fully automated swing EA with 50% partial profit engine
-│   ├── H1_OrderBlock_Swing_EA.ex5             # Compiled MT5 EA binary
-│   ├── H1_OrderBlock_Swing_Indicator.mq5      # Visual chart indicator (draws yellow order block boxes)
+│   ├── H1_OrderBlock_Swing_EA.mq5             # Standard swing EA (single trade, 50% partial profit)
+│   ├── H1_OrderBlock_Swing_EA.ex5             # Compiled standard EA binary
+│   ├── H1_OrderBlock_Pyramid_EA.mq5           # Pro EA (Continuation Trailing + Risk-Free Pyramiding)
+│   ├── H1_OrderBlock_Pyramid_EA.ex5           # Compiled Pro Pyramid EA binary
+│   ├── H1_OrderBlock_Swing_Indicator.mq5      # Visual chart indicator (draws clean hollow order blocks)
 │   └── H1_OrderBlock_Swing_Indicator.ex5      # Compiled MT5 indicator binary
 ├── scripts/
 │   └── simulate_h1_growth.py                  # Account doubling simulation script
 └── tradingview/
     └── H1_OrderBlock_Swing.pine               # TradingView Pine Script v6 indicator with alert conditions
 ```
+
 
