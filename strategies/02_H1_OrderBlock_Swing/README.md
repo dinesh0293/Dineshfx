@@ -10,18 +10,22 @@ Inspired by multi-day swing holding mechanics, positioning with strict **0.01 mi
 
 ## Performance Summary (10,000 H1 Candles / ~20 Months on Vantage Markets)
 
-| Metric | 1:4.0 R:R Target (Recommended) | 1:5.0 R:R Target (Positional) |
-| :--- | :---: | :---: |
-| **Asset** | **XAUUSD (Gold)** | **XAUUSD (Gold)** |
-| **Timeframe** | **H1 (1-Hour)** | **H1 (1-Hour)** |
-| **Backtest Period** | Jan 17, 2025 – Sep 25, 2026 | Jan 17, 2025 – Sep 25, 2026 |
-| **Total Trades** | 61 trades (~3 trades per month) | 61 trades (~3 trades per month) |
-| **Win Rate** | **36.1%** | **34.4%** |
-| **Profit Factor (PF)** | **2.18** 🏆 | **2.49** 🏆 |
-| **Total Net Return (R)** | **+46.2 R** | **+59.7 R** |
-| **Max Drawdown** | **-6.0 R** (Extremely safe) | **-9.0 R** |
-| **Average Stop Loss** | ~$15.00 – $18.00 per ounce | ~$15.00 – $18.00 per ounce |
-| **Target Distance** | **+$60.00 – $90.00 per ounce** | **+$75.00 – $120.00 per ounce** |
+| Metric | Standard (50% Partial + Opt 2) | Standard (Full Runner + Opt 2) | Pro Pyramid (Opt 2 + Opt 3) |
+| :--- | :---: | :---: | :---: |
+| **Asset** | **XAUUSD (Gold)** | **XAUUSD (Gold)** | **XAUUSD (Gold)** |
+| **Timeframe** | **H1 (1-Hour)** | **H1 (1-Hour)** | **H1 (1-Hour)** |
+| **Initial Capital** | **$100.00** | **$100.00** | **$100.00** |
+| **Final Account Balance** | **$386.23** | **$518.02** 🏆 | **$477.91** |
+| **Total Net Profit ($)** | **+$286.23** | **+$418.02** | **+$377.91** |
+| **Net Return (%)** | **+286.2%** | **+418.0%** (5.1x) | **+377.9%** (4.7x) |
+| **Profit Factor (PF)** | **0.90** | **1.70** | **1.63** |
+| **Total Closed Trades** | 41 (~2 trades/mo) | 41 (~2 trades/mo) | 42 (~2 trades/mo) |
+| **Winning Trades** | 12 | 12 | 12 |
+| **Losing Trades** | 25 | 25 | 25 |
+| **Pyramid Trades Stacked** | 0 (Single) | 0 (Single) | 2 |
+| **Average Winning Trade** | +$44.71 | +$84.71 | +$81.37 |
+| **Average Losing Trade** | -$23.94 | -$23.94 | -$23.94 |
+| **Max Drawdown ($)** | -$130.33 | -$119.82 | -$119.82 |
 
 ---
 
