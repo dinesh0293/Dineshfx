@@ -80,12 +80,13 @@ Below is the step-by-step visual roadmap of how this strategy executes a single 
 ## EA Versions Available
 
 1. **Standard Version (`H1_OrderBlock_Swing_EA`)**:
-   - Single position at a time (Max: 1).
-   - Conservative execution with 50% partial close at +2.0R and move to Break-Even.
+   - Single position at a time (`InpMaxOpenTrades = 1`).
+   - Features **Option 2 (Continuation OB Structural Trailing)**: Automatically trails Stop Loss behind newly confirmed H1 Order Blocks once in profit $\ge +1.5R$.
+   - 50% partial profit close at +2.0R with initial Break-Even protection.
    - Magic Number: `5502026`.
 2. **Pro Pyramid Version (`H1_OrderBlock_Pyramid_EA`)**:
-   - **Option 2 (Continuation OB Trailing Shield)**: Trails Stop Loss behind every newly confirmed H1 Order Block once in profit $\ge +1.5R$.
-   - **Option 3 (Risk-Free Pyramiding)**: Stacks a 2nd `0.01 lot` position on continuation Order Block retests *only* after Trade 1 has already locked in Break-Even ($0 risk).
+   - Multi-position scaling (`InpMaxOpenTrades = 2`).
+   - Features both **Option 2 (Continuation OB Trailing Shield)** and **Option 3 (Risk-Free Pyramiding)**: Stacks a 2nd `0.01 lot` position on continuation Order Block retests *only* after Trade 1 has already locked in Break-Even ($0 risk).
    - Magic Number: `5502027`.
 
 ---

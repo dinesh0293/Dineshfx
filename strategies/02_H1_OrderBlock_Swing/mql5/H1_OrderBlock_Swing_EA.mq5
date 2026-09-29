@@ -20,6 +20,10 @@ input bool   InpRequireDailyTrend     = true;           // Filter by Daily 50 EM
 input int    InpDailyEMAPeriod        = 50;             // Daily EMA Period
 input int    InpSLBufferPoints        = 200;            // SL Buffer beyond swing wick ($2.00 = 200 pts)
 
+input group "=== Continuation OB Structural Trailing (Option 2) ==="
+input bool   InpEnableContinuationTrailing = true;      // Trail SL behind Continuation OBs
+input double InpContinuationTrailMinR      = 1.5;       // Min Profit R before trailing behind new OBs (+1.5R)
+
 input group "=== Targets & Money Management ==="
 input double InpTargetRR              = 4.0;            // Final Target Risk-to-Reward (1:4.0 R:R)
 input bool   InpEnablePartialTP       = true;           // Enable 50% Partial Close at +2.0R
