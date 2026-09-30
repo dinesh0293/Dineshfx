@@ -3,7 +3,7 @@ indicator("H1 Institutional Order Block & Swing Trader [Dineshfx]", overlay=true
 
 // --- Inputs ---
 grp_swing = "=== Swing & Order Block Detection ==="
-pivotSpan = input.int(8, "Swing Pivot Span (Bars)", group=grp_swing)
+pivotSpan = input.int(3, "Swing Pivot Span (Bars)", minval=2, maxval=20, group=grp_swing)
 minDisp = input.float(8.0, "Min Displacement ($ on Gold)", group=grp_swing)
 useDailyTrend = input.bool(true, "Filter by Daily 50 EMA Trend", group=grp_swing)
 slBuffer = input.float(2.0, "Stop Loss Buffer ($)", group=grp_swing)
@@ -27,11 +27,14 @@ pLow = ta.pivotlow(low, pivotSpan, pivotSpan)
 
 // --- Detect Bearish Order Block ---
 if not na(pHigh) and trendDown
-    // Check displacement: low of subsequent bars dropped significantly
+    // Check displacement safely without exceeding current bar boundary
     float dropLow = low[pivotSpan - 1]
-    for k = 2 to 4
-        if low[pivotSpan - k] < dropLow
-            dropLow := low[pivotSpan - k]
+    int maxCheck = math.min(pivotSpan, 4)
+    if maxCheck >= 1
+        for k = 1 to maxCheck
+            int idx = pivotSpan - k
+            if idx >= 0 and low[idx] < dropLow
+                dropLow := low[idx]
 
     if (pHigh - dropLow) >= minDisp
         boxTop = pHigh
@@ -49,9 +52,12 @@ if not na(pHigh) and trendDown
 // --- Detect Bullish Order Block ---
 if not na(pLow) and trendUp
     float rallyHigh = high[pivotSpan - 1]
-    for k = 2 to 4
-        if high[pivotSpan - k] > rallyHigh
-            rallyHigh := high[pivotSpan - k]
+    int maxCheck = math.min(pivotSpan, 4)
+    if maxCheck >= 1
+        for k = 1 to maxCheck
+            int idx = pivotSpan - k
+            if idx >= 0 and high[idx] > rallyHigh
+                rallyHigh := high[idx]
 
     if (rallyHigh - pLow) >= minDisp
         boxTop = math.max(open[pivotSpan], close[pivotSpan])
