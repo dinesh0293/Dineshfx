@@ -30,7 +30,6 @@ pLow = ta.pivotlow(low, pivotSpan, pivotSpan)
 
 // --- Detect Bearish Order Block (SELL) ---
 if not na(pHigh) and trendDown
-    // Check displacement safely without exceeding current bar boundary
     float dropLow = low[pivotSpan - 1]
     int maxCheck = math.min(pivotSpan, 4)
     if maxCheck >= 1
@@ -40,36 +39,24 @@ if not na(pHigh) and trendDown
                 dropLow := low[idx]
 
     if (pHigh - dropLow) >= minDisp
-        boxTop = pHigh
-        boxBottom = math.min(open[pivotSpan], close[pivotSpan])
-        boxLeft = bar_index[pivotSpan]
-        boxRight = bar_index + 40
+        int boxLeft = bar_index[pivotSpan]
+        int boxRight = bar_index + 40
+        float boxTop = pHigh
+        float boxBottom = math.min(open[pivotSpan], close[pivotSpan])
         
-        slPrice = pHigh + slBuffer
-        entryPrice = boxBottom
-        riskDist = slPrice - entryPrice
-        tpPrice = entryPrice - (riskDist * targetRR)
+        float slPrice = pHigh + slBuffer
+        float entryPrice = boxBottom
+        float riskDist = slPrice - entryPrice
+        float tpPrice = entryPrice - (riskDist * targetRR)
 
-        // Draw Order Block Box
-        box.new(left=boxLeft, top=boxTop, right=boxRight, bottom=boxBottom,
-                border_color=colorBearishBorder, border_width=1,
-                bgcolor=colorBearish, extend=extend.none)
+        box.new(boxLeft, boxTop, boxRight, boxBottom, border_color=colorBearishBorder, border_width=1, bgcolor=colorBearish, extend=extend.none)
         
-        // Complete Label: Entry, SL, TP
-        labelText = "H1 SELL OB\n" +
-                    "Entry: " + str.tostring(entryPrice, "#.##") + "\n" +
-                    "SL: " + str.tostring(slPrice, "#.##") + " (Risk: $" + str.tostring(riskDist, "#.##") + ")\n" +
-                    "TP: " + str.tostring(tpPrice, "#.##") + " (1:" + str.tostring(targetRR, "#.#") + " R:R)"
-        
-        label.new(boxLeft, boxTop, labelText, 
-                  color=color.red, textcolor=color.white, style=label.style_label_down, size=size.small)
+        string labelText = "H1 SELL OB\nEntry: " + str.tostring(entryPrice, "#.##") + "\nSL: " + str.tostring(slPrice, "#.##") + " (Risk: $" + str.tostring(riskDist, "#.##") + ")\nTP: " + str.tostring(tpPrice, "#.##") + " (1:" + str.tostring(targetRR, "#.#") + " R:R)"
+        label.new(boxLeft, boxTop, labelText, color=color.red, textcolor=color.white, style=label.style_label_down, size=size.small)
 
-        // Draw Take Profit Target Line & Tag
         if showTPLines
-            line.new(boxLeft, tpPrice, boxRight, tpPrice, 
-                     color=colorTPLine, width=2, style=line.style_dashed)
-            label.new(boxRight, tpPrice, "TP: " + str.tostring(tpPrice, "#.##") + " (+1:" + str.tostring(targetRR, "#.#") + "R)", 
-                      color=color.green, textcolor=color.white, style=label.style_label_left, size=size.tiny)
+            line.new(boxLeft, tpPrice, boxRight, tpPrice, color=colorTPLine, width=2, style=line.style_dashed)
+            label.new(boxRight, tpPrice, "TP: " + str.tostring(tpPrice, "#.##") + " (+1:" + str.tostring(targetRR, "#.#") + "R)", color=color.green, textcolor=color.white, style=label.style_label_left, size=size.tiny)
 
 // --- Detect Bullish Order Block (BUY) ---
 if not na(pLow) and trendUp
@@ -82,33 +69,24 @@ if not na(pLow) and trendUp
                 rallyHigh := high[idx]
 
     if (rallyHigh - pLow) >= minDisp
-        boxTop = math.max(open[pivotSpan], close[pivotSpan])
-        boxBottom = pLow
-        boxLeft = bar_index[pivotSpan]
-        boxRight = bar_index + 40
+        int boxLeft = bar_index[pivotSpan]
+        int boxRight = bar_index + 40
+        float boxTop = math.max(open[pivotSpan], close[pivotSpan])
+        float boxBottom = pLow
 
-        slPrice = pLow - slBuffer
-        entryPrice = boxTop
-        riskDist = entryPrice - slPrice
-        tpPrice = entryPrice + (riskDist * targetRR)
+        float slPrice = pLow - slBuffer
+        float entryPrice = boxTop
+        float riskDist = entryPrice - slPrice
+        float tpPrice = entryPrice + (riskDist * targetRR)
 
-        box.new(left=boxLeft, top=boxTop, right=boxRight, bottom=boxBottom,
-                border_color=colorBullishBorder, border_width=1,
-                bgcolor=colorBullish, extend=extend.none)
+        box.new(boxLeft, boxTop, boxRight, boxBottom, border_color=colorBullishBorder, border_width=1, bgcolor=colorBullish, extend=extend.none)
 
-        labelText = "H1 BUY OB\n" +
-                    "Entry: " + str.tostring(entryPrice, "#.##") + "\n" +
-                    "SL: " + str.tostring(slPrice, "#.##") + " (Risk: $" + str.tostring(riskDist, "#.##") + ")\n" +
-                    "TP: " + str.tostring(tpPrice, "#.##") + " (1:" + str.tostring(targetRR, "#.#") + " R:R)"
-
-        label.new(boxLeft, boxBottom, labelText, 
-                  color=color.green, textcolor=color.white, style=label.style_label_up, size=size.small)
+        string labelText = "H1 BUY OB\nEntry: " + str.tostring(entryPrice, "#.##") + "\nSL: " + str.tostring(slPrice, "#.##") + " (Risk: $" + str.tostring(riskDist, "#.##") + ")\nTP: " + str.tostring(tpPrice, "#.##") + " (1:" + str.tostring(targetRR, "#.#") + " R:R)"
+        label.new(boxLeft, boxBottom, labelText, color=color.green, textcolor=color.white, style=label.style_label_up, size=size.small)
 
         if showTPLines
-            line.new(boxLeft, tpPrice, boxRight, tpPrice, 
-                     color=colorTPLine, width=2, style=line.style_dashed)
-            label.new(boxRight, tpPrice, "TP: " + str.tostring(tpPrice, "#.##") + " (+1:" + str.tostring(targetRR, "#.#") + "R)", 
-                      color=color.green, textcolor=color.white, style=label.style_label_left, size=size.tiny)
+            line.new(boxLeft, tpPrice, boxRight, tpPrice, color=colorTPLine, width=2, style=line.style_dashed)
+            label.new(boxRight, tpPrice, "TP: " + str.tostring(tpPrice, "#.##") + " (+1:" + str.tostring(targetRR, "#.#") + "R)", color=color.green, textcolor=color.white, style=label.style_label_left, size=size.tiny)
 
 // --- Visual Alerts ---
 alertcondition(not na(pHigh) and trendDown, "New Bearish Order Block Formed", "New Bearish Order Block Formed on Gold H1!")
