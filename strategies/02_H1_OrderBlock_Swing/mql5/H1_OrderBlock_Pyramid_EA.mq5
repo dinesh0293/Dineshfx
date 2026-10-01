@@ -28,8 +28,8 @@ input int    InpMaxOpenTrades              = 2;         // Max Concurrent Trades
 
 input group "=== Targets & Money Management ==="
 input double InpTargetRR              = 4.0;            // Final Target Risk-to-Reward (1:4.0 R:R)
-input bool   InpEnablePartialTP       = true;           // Enable 50% Partial Close at +2.0R (if vol > min lot)
-input double InpPartialTriggerR       = 2.0;            // Partial Close Trigger R (+2.0R)
+input bool   InpEnablePartialTP       = true;           // Enable 50% Partial Close at +1.5R (if vol > min lot)
+input double InpPartialTriggerR       = 1.5;            // Partial Close Trigger R (+1.5R)
 input double InpFixedLotSize          = 0.01;           // Fixed Lot Size (0.01 for $100 account)
 input double InpRiskPercent           = 1.0;            // Risk Percent (used if Fixed Lot is 0.0)
 input ulong  InpMagicNumber           = 5502027;        // Magic Number for Pyramid EA

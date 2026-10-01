@@ -1,11 +1,13 @@
 //@version=6
-indicator("H1 Institutional Order Block & Swing Trader [Dineshfx]", overlay=true, max_boxes_count=100, max_labels_count=100, max_lines_count=100)
+indicator("H1 Institutional Order Block & Swing Trader [Dineshfx]", overlay=true, max_boxes_count=100, max_labels_count=200, max_lines_count=200)
 
 // --- Inputs (Mirrored 100% to match MT5 Indicator) ---
 grp_swing = "=== Swing & Order Block Detection ==="
 pivotSpan = input.int(8, "Swing Pivot Span (Bars)", minval=2, maxval=20, tooltip="8 bars matches MT5 institutional major swings. 3-5 bars shows minor scalps.", group=grp_swing)
 minDisp = input.float(8.0, "Min Displacement ($ on Gold)", group=grp_swing)
-targetRR = input.float(4.0, "Take Profit Target (R:R)", minval=1.5, maxval=10.0, step=0.5, group=grp_swing)
+tp1_RR = input.float(1.5, "TP 1 Target (R:R)", minval=0.5, maxval=5.0, step=0.1, group=grp_swing)
+tp2_RR = input.float(2.5, "TP 2 Target (R:R)", minval=1.0, maxval=8.0, step=0.1, group=grp_swing)
+tp3_RR = input.float(4.0, "TP 3 Target (R:R)", minval=1.5, maxval=10.0, step=0.5, group=grp_swing)
 useDailyTrend = input.bool(false, "Filter by Daily 50 EMA Trend (false = Show Both Buy & Sell OBs)", group=grp_swing)
 slBuffer = input.float(2.0, "Stop Loss Buffer ($)", group=grp_swing)
 
@@ -15,7 +17,9 @@ colorBearish = input.color(color.new(#facc15, 80), "Bearish Order Block (Yellow 
 colorBearishBorder = input.color(#eab308, "Bearish Box Border", group=grp_visual)
 colorBullish = input.color(color.new(#10b981, 80), "Bullish Order Block (Green Box)", group=grp_visual)
 colorBullishBorder = input.color(#059669, "Bullish Box Border", group=grp_visual)
-colorTPLine = input.color(color.new(#22c55e, 0), "Take Profit Line Color", group=grp_visual)
+colorTP1 = input.color(color.new(#4ade80, 0), "TP 1 Line (1:1.5R)", group=grp_visual)
+colorTP2 = input.color(color.new(#22c55e, 0), "TP 2 Line (1:2.5R)", group=grp_visual)
+colorTP3 = input.color(color.new(#15803d, 0), "TP 3 Line (1:4.0R)", group=grp_visual)
 
 // --- Daily 50 EMA Trend ---
 dailyEma = request.security(syminfo.tickerid, "D", ta.ema(close, 50))
@@ -39,15 +43,21 @@ if not na(pHigh) and trendDown and ((pHigh - recentLow) >= minDisp)
     slPrice = pHigh + slBuffer
     entryPrice = boxBottom
     riskDist = slPrice - entryPrice
-    tpPrice = entryPrice - (riskDist * targetRR)
+    tp1Price = entryPrice - (riskDist * tp1_RR)
+    tp2Price = entryPrice - (riskDist * tp2_RR)
+    tp3Price = entryPrice - (riskDist * tp3_RR)
 
     box.new(boxLeft, boxTop, boxRight, boxBottom, border_color=colorBearishBorder, border_width=1, bgcolor=colorBearish, extend=extend.none)
-    labelText = str.format("H1 SELL OB\nEntry: {0,number,#.##}\nSL: {1,number,#.##}\nTP: {2,number,#.##} (1:{3,number,#.#}R)", entryPrice, slPrice, tpPrice, targetRR)
+    labelText = str.format("H1 SELL OB\nEntry: {0,number,#.##}\nSL: {1,number,#.##}\nTP1: {2,number,#.##} (1:{3,number,#.#}R)\nTP2: {4,number,#.##} (1:{5,number,#.#}R)\nTP3: {6,number,#.##} (1:{7,number,#.#}R)", entryPrice, slPrice, tp1Price, tp1_RR, tp2Price, tp2_RR, tp3Price, tp3_RR)
     label.new(boxLeft, boxTop, labelText, color=color.red, textcolor=color.white, style=label.style_label_down, size=size.small)
 
     if showTPLines
-        line.new(boxLeft, tpPrice, boxRight, tpPrice, color=colorTPLine, width=2, style=line.style_dashed)
-        label.new(boxRight, tpPrice, str.format("TP: {0,number,#.##} (+1:{1,number,#.#}R)", tpPrice, targetRR), color=color.green, textcolor=color.white, style=label.style_label_left, size=size.tiny)
+        line.new(boxLeft, tp1Price, boxRight, tp1Price, color=colorTP1, width=1, style=line.style_dashed)
+        label.new(boxRight, tp1Price, str.format("TP1: {0,number,#.##} (1:{1,number,#.#}R)", tp1Price, tp1_RR), color=color.new(#16a34a, 0), textcolor=color.white, style=label.style_label_left, size=size.tiny)
+        line.new(boxLeft, tp2Price, boxRight, tp2Price, color=colorTP2, width=1, style=line.style_dashed)
+        label.new(boxRight, tp2Price, str.format("TP2: {0,number,#.##} (1:{1,number,#.#}R)", tp2Price, tp2_RR), color=color.new(#15803d, 0), textcolor=color.white, style=label.style_label_left, size=size.tiny)
+        line.new(boxLeft, tp3Price, boxRight, tp3Price, color=colorTP3, width=2, style=line.style_dashed)
+        label.new(boxRight, tp3Price, str.format("TP3: {0,number,#.##} (1:{1,number,#.#}R)", tp3Price, tp3_RR), color=color.new(#14532d, 0), textcolor=color.white, style=label.style_label_left, size=size.tiny)
 
 // --- Detect Bullish Order Block (BUY) ---
 if not na(pLow) and trendUp and ((recentHigh - pLow) >= minDisp)
@@ -58,15 +68,21 @@ if not na(pLow) and trendUp and ((recentHigh - pLow) >= minDisp)
     slPrice = pLow - slBuffer
     entryPrice = boxTop
     riskDist = entryPrice - slPrice
-    tpPrice = entryPrice + (riskDist * targetRR)
+    tp1Price = entryPrice + (riskDist * tp1_RR)
+    tp2Price = entryPrice + (riskDist * tp2_RR)
+    tp3Price = entryPrice + (riskDist * tp3_RR)
 
     box.new(boxLeft, boxTop, boxRight, boxBottom, border_color=colorBullishBorder, border_width=1, bgcolor=colorBullish, extend=extend.none)
-    labelText = str.format("H1 BUY OB\nEntry: {0,number,#.##}\nSL: {1,number,#.##}\nTP: {2,number,#.##} (1:{3,number,#.#}R)", entryPrice, slPrice, tpPrice, targetRR)
+    labelText = str.format("H1 BUY OB\nEntry: {0,number,#.##}\nSL: {1,number,#.##}\nTP1: {2,number,#.##} (1:{3,number,#.#}R)\nTP2: {4,number,#.##} (1:{5,number,#.#}R)\nTP3: {6,number,#.##} (1:{7,number,#.#}R)", entryPrice, slPrice, tp1Price, tp1_RR, tp2Price, tp2_RR, tp3Price, tp3_RR)
     label.new(boxLeft, boxBottom, labelText, color=color.green, textcolor=color.white, style=label.style_label_up, size=size.small)
 
     if showTPLines
-        line.new(boxLeft, tpPrice, boxRight, tpPrice, color=colorTPLine, width=2, style=line.style_dashed)
-        label.new(boxRight, tpPrice, str.format("TP: {0,number,#.##} (+1:{1,number,#.#}R)", tpPrice, targetRR), color=color.green, textcolor=color.white, style=label.style_label_left, size=size.tiny)
+        line.new(boxLeft, tp1Price, boxRight, tp1Price, color=colorTP1, width=1, style=line.style_dashed)
+        label.new(boxRight, tp1Price, str.format("TP1: {0,number,#.##} (1:{1,number,#.#}R)", tp1Price, tp1_RR), color=color.new(#16a34a, 0), textcolor=color.white, style=label.style_label_left, size=size.tiny)
+        line.new(boxLeft, tp2Price, boxRight, tp2Price, color=colorTP2, width=1, style=line.style_dashed)
+        label.new(boxRight, tp2Price, str.format("TP2: {0,number,#.##} (1:{1,number,#.#}R)", tp2Price, tp2_RR), color=color.new(#15803d, 0), textcolor=color.white, style=label.style_label_left, size=size.tiny)
+        line.new(boxLeft, tp3Price, boxRight, tp3Price, color=colorTP3, width=2, style=line.style_dashed)
+        label.new(boxRight, tp3Price, str.format("TP3: {0,number,#.##} (1:{1,number,#.#}R)", tp3Price, tp3_RR), color=color.new(#14532d, 0), textcolor=color.white, style=label.style_label_left, size=size.tiny)
 
 // --- Visual Alerts ---
 alertcondition(not na(pHigh) and trendDown, "New Bearish Order Block Formed", "New Bearish Order Block Formed on Gold H1!")

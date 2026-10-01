@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Copyright 2026, Dineshfx"
 #property link      "https://github.com/dinesh0293/Dineshfx"
-#property version   "1.20"
+#property version   "1.30"
 #property indicator_chart_window
 #property indicator_buffers 2
 #property indicator_plots   2
@@ -27,7 +27,9 @@ input double InpMinDisplacementPoints = 800;            // Min Displacement ($8.
 input bool   InpRequireDailyTrend     = false;          // Filter by Daily 50 EMA Trend (false = all H1 OBs)
 input int    InpDailyEMAPeriod        = 50;             // Daily EMA Period
 input double InpSLBufferPoints        = 200;            // SL Buffer beyond swing wick ($2.00 = 200 pts)
-input double InpTargetRR              = 4.0;            // Take Profit Target (1:4.0 R:R)
+input double InpTP1_RR                = 1.5;            // Take Profit 1 Target (1:1.5 R:R)
+input double InpTP2_RR                = 2.5;            // Take Profit 2 Target (1:2.5 R:R)
+input double InpTP3_RR                = 4.0;            // Take Profit 3 Target (1:4.0 R:R)
 input bool   InpDrawTPLines           = true;           // Draw Take Profit Target Lines
 
 input group "=== Visuals & Clean Display ==="
@@ -69,7 +71,7 @@ int OnInit()
       m_dailyEmaHandle = iMA(_Symbol, PERIOD_D1, InpDailyEMAPeriod, 0, MODE_EMA, PRICE_CLOSE);
    }
 
-   Print("H1_OrderBlock_Swing_Indicator v1.20 initialized cleanly on ", _Symbol);
+   Print("H1_OrderBlock_Swing_Indicator v1.30 initialized cleanly on ", _Symbol);
    return(INIT_SUCCEEDED);
 }
 
@@ -111,9 +113,9 @@ void DrawOrderBlock(string name, datetime tStart, datetime tEnd, double top, dou
 }
 
 //+------------------------------------------------------------------+
-//| Draw or Update an Order Block Text Label (OB Name + SL Price)    |
+//| Draw or Update a Take Profit Trend Line                          |
 //+------------------------------------------------------------------+
-void DrawTPLine(string name, datetime tStart, datetime tEnd, double price, color clr)
+void DrawTPLine(string name, datetime tStart, datetime tEnd, double price, color clr, int width = 1)
 {
    if(!InpDrawTPLines) return;
    if(ObjectFind(0, name) < 0)
@@ -121,7 +123,7 @@ void DrawTPLine(string name, datetime tStart, datetime tEnd, double price, color
       ObjectCreate(0, name, OBJ_TREND, 0, tStart, price, tEnd, price);
       ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
       ObjectSetInteger(0, name, OBJPROP_STYLE, STYLE_DASH);
-      ObjectSetInteger(0, name, OBJPROP_WIDTH, 2);
+      ObjectSetInteger(0, name, OBJPROP_WIDTH, width);
       ObjectSetInteger(0, name, OBJPROP_RAY_RIGHT, false);
       ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
    }
@@ -131,9 +133,14 @@ void DrawTPLine(string name, datetime tStart, datetime tEnd, double price, color
       ObjectSetInteger(0, name, OBJPROP_TIME, 1, tEnd);
       ObjectSetDouble(0, name, OBJPROP_PRICE, 0, price);
       ObjectSetDouble(0, name, OBJPROP_PRICE, 1, price);
+      ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+      ObjectSetInteger(0, name, OBJPROP_WIDTH, width);
    }
 }
 
+//+------------------------------------------------------------------+
+//| Draw or Update an Order Block Text Label                         |
+//+------------------------------------------------------------------+
 void DrawOrderBlockLabel(string name, datetime tStart, double price, string text, color clr)
 {
    if(!InpShowLabels) return;
@@ -275,12 +282,21 @@ int OnCalculate(const int rates_total,
 
                   double entryPrice = obBottom;
                   double riskDist = slPrice - entryPrice;
-                  double tpPrice = entryPrice - (riskDist * InpTargetRR);
+                  double tp1Price = entryPrice - (riskDist * InpTP1_RR);
+                  double tp2Price = entryPrice - (riskDist * InpTP2_RR);
+                  double tp3Price = entryPrice - (riskDist * InpTP3_RR);
 
-                  string labelText = StringFormat("H1 SELL OB | Entry: %.2f | SL: %.2f | TP: %.2f (1:%.1fR)",
-                                                  entryPrice, slPrice, tpPrice, InpTargetRR);
+                  string labelText = StringFormat("H1 SELL OB | Entry: %.2f | SL: %.2f | TP1: %.2f (1:%.1fR) | TP2: %.2f (1:%.1fR) | TP3: %.2f (1:%.1fR)",
+                                                  entryPrice, slPrice, tp1Price, InpTP1_RR, tp2Price, InpTP2_RR, tp3Price, InpTP3_RR);
                   DrawOrderBlockLabel(obName + "_TXT", tStart, pivotHigh + (40 * point), labelText, InpColorBearishOB);
-                  DrawTPLine(obName + "_TPLINE", tStart, tEnd, tpPrice, clrLimeGreen);
+
+                  DrawTPLine(obName + "_TP1", tStart, tEnd, tp1Price, clrLimeGreen, 1);
+                  DrawTPLine(obName + "_TP2", tStart, tEnd, tp2Price, clrMediumSeaGreen, 1);
+                  DrawTPLine(obName + "_TP3", tStart, tEnd, tp3Price, clrSeaGreen, 2);
+
+                  DrawOrderBlockLabel(obName + "_TP1_TXT", tEnd, tp1Price, StringFormat("TP1: %.2f (1:%.1fR)", tp1Price, InpTP1_RR), clrLimeGreen);
+                  DrawOrderBlockLabel(obName + "_TP2_TXT", tEnd, tp2Price, StringFormat("TP2: %.2f (1:%.1fR)", tp2Price, InpTP2_RR), clrMediumSeaGreen);
+                  DrawOrderBlockLabel(obName + "_TP3_TXT", tEnd, tp3Price, StringFormat("TP3: %.2f (1:%.1fR)", tp3Price, InpTP3_RR), clrSeaGreen);
 
                   BufferBearish[pIdx] = pivotHigh + (50 * point);
                }
@@ -364,12 +380,21 @@ int OnCalculate(const int rates_total,
 
                   double entryPrice = obTop;
                   double riskDist = entryPrice - slPrice;
-                  double tpPrice = entryPrice + (riskDist * InpTargetRR);
+                  double tp1Price = entryPrice + (riskDist * InpTP1_RR);
+                  double tp2Price = entryPrice + (riskDist * InpTP2_RR);
+                  double tp3Price = entryPrice + (riskDist * InpTP3_RR);
 
-                  string labelText = StringFormat("H1 BUY OB | Entry: %.2f | SL: %.2f | TP: %.2f (1:%.1fR)",
-                                                  entryPrice, slPrice, tpPrice, InpTargetRR);
+                  string labelText = StringFormat("H1 BUY OB | Entry: %.2f | SL: %.2f | TP1: %.2f (1:%.1fR) | TP2: %.2f (1:%.1fR) | TP3: %.2f (1:%.1fR)",
+                                                  entryPrice, slPrice, tp1Price, InpTP1_RR, tp2Price, InpTP2_RR, tp3Price, InpTP3_RR);
                   DrawOrderBlockLabel(obName + "_TXT", tStart, pivotLow - (40 * point), labelText, InpColorBullishOB);
-                  DrawTPLine(obName + "_TPLINE", tStart, tEnd, tpPrice, clrLimeGreen);
+
+                  DrawTPLine(obName + "_TP1", tStart, tEnd, tp1Price, clrLimeGreen, 1);
+                  DrawTPLine(obName + "_TP2", tStart, tEnd, tp2Price, clrMediumSeaGreen, 1);
+                  DrawTPLine(obName + "_TP3", tStart, tEnd, tp3Price, clrSeaGreen, 2);
+
+                  DrawOrderBlockLabel(obName + "_TP1_TXT", tEnd, tp1Price, StringFormat("TP1: %.2f (1:%.1fR)", tp1Price, InpTP1_RR), clrLimeGreen);
+                  DrawOrderBlockLabel(obName + "_TP2_TXT", tEnd, tp2Price, StringFormat("TP2: %.2f (1:%.1fR)", tp2Price, InpTP2_RR), clrMediumSeaGreen);
+                  DrawOrderBlockLabel(obName + "_TP3_TXT", tEnd, tp3Price, StringFormat("TP3: %.2f (1:%.1fR)", tp3Price, InpTP3_RR), clrSeaGreen);
 
                   BufferBullish[pIdx] = pivotLow - (50 * point);
                }
