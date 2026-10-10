@@ -368,7 +368,7 @@ if barstate.islast and showHUD
     string currentTF = timeframe.isminutes ? str.format("M{0}", timeframe.multiplier) : (timeframe.isdaily ? "D1" : timeframe.period)
 
     table.cell(hud, 0, 0, "Institutional OB [Improved]", bgcolor=#1e293b, text_color=color.yellow, text_size=size.small)
-    table.cell(hud, 1, 0, str.format("TF: {0}", currentTF), bgcolor=#1e293b, text_color=color.cyan, text_size=size.small)
+    table.cell(hud, 1, 0, str.format("TF: {0}", currentTF), bgcolor=#1e293b, text_color=color.aqua, text_size=size.small)
 
     table.cell(hud, 0, 1, str.format("Daily 50 EMA: {0,number,#.##}", dailyEma), text_color=trendColor, text_size=size.tiny)
     table.cell(hud, 1, 1, trendText, text_color=trendColor, text_size=size.tiny)
