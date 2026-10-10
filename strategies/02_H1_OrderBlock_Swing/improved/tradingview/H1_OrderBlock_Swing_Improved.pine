@@ -350,6 +350,26 @@ if array.size(activeZones) > 0
                     box.set_border_style(z.boxId, line.style_dashed)
                 if not na(z.infoLabel)
                     label.set_text(z.infoLabel, z.isBullish ? "BUY OB (Invalidated ❌)" : "SELL OB (Invalidated ❌)")
+                
+                // Erase TP1, TP2, TP3 lines and target tags for invalidated OBs
+                if not na(z.tp1Line)
+                    line.delete(z.tp1Line)
+                    z.tp1Line := na
+                if not na(z.tp2Line)
+                    line.delete(z.tp2Line)
+                    z.tp2Line := na
+                if not na(z.tp3Line)
+                    line.delete(z.tp3Line)
+                    z.tp3Line := na
+                if not na(z.tp1Label)
+                    label.delete(z.tp1Label)
+                    z.tp1Label := na
+                if not na(z.tp2Label)
+                    label.delete(z.tp2Label)
+                    z.tp2Label := na
+                if not na(z.tp3Label)
+                    label.delete(z.tp3Label)
+                    z.tp3Label := na
 
 // ==============================================================================
 // 7. DASHBOARD HUD (Top Right Info Table)
