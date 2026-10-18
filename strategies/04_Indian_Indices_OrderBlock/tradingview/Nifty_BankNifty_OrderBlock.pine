@@ -12,6 +12,11 @@ autoScaleTF          = input.bool(true, "Auto-scale Points by Timeframe (5m, 15m
 customMinDisp        = input.float(70.0, "Manual Min Displacement (Points)", minval=5.0, step=5.0, group=grp_index)
 customSLBuffer       = input.float(12.0, "Manual Stop Loss Buffer (Points)", minval=1.0, step=1.0, group=grp_index)
 
+grp_quality = "=== Box Size Quality & Safety Badges ==="
+showQualityBadge     = input.bool(true, "Show Quality Badge (🟢 Safe / 🟡 Acceptable / 🔴 Wide)", tooltip="Labels every box with its risk rating so you know immediately whether to take or skip.", group=grp_quality)
+filterWideBoxes      = input.bool(false, "Filter / Hide Wide Boxes (Skip High Risk)", tooltip="If enabled, boxes wider than the threshold will not be plotted, keeping only tight, high-probability setups.", group=grp_quality)
+maxAllowedRisk       = input.float(160.0, "Max Allowed Risk Points (Threshold)", minval=20.0, step=10.0, tooltip="For Nifty, recommended max risk is 40-50 pts. For Bank Nifty, recommended max risk is 140-160 pts.", group=grp_quality)
+
 grp_smc = "=== Market Structure & Order Block Rules ==="
 pivotSpan            = input.int(8, "Swing Pivot Span (Bars)", minval=2, maxval=20, tooltip="Bars left & right to confirm institutional swing pivot.", group=grp_smc)
 requireBOS           = input.bool(false, "Require Break of Structure (BOS)", tooltip="Leave false for standard Order Block formation on intraday swings.", group=grp_smc)
@@ -77,6 +82,10 @@ if autoScaleTF
             effectiveMinDisp := (indexPreset == "BANK NIFTY") ? 450.0 : 180.0
     else if timeframe.isdaily
         effectiveMinDisp := (indexPreset == "BANK NIFTY") ? 600.0 : 250.0
+
+// Safe limits for quality ratings
+float safeLimit   = (indexPreset == "BANK NIFTY") ? 120.0 : 35.0
+float acceptLimit = (indexPreset == "BANK NIFTY") ? 160.0 : 50.0
 
 // ==============================================================================
 // 3. STABLE DAILY TREND FILTER
@@ -209,12 +218,24 @@ if not na(pHigh) and trendDown
         float slPrice    = math.max(swingPrice, obTop) + slBuf
         float riskDist   = slPrice - entryPrice
 
-        if riskDist > 0
+        bool passesRiskFilter = not filterWideBoxes or (riskDist <= maxAllowedRisk)
+
+        if riskDist > 0 and passesRiskFilter
             float tp1Price = entryPrice - (riskDist * tp1_RR)
             float tp2Price = entryPrice - (riskDist * tp2_RR)
             float tp3Price = entryPrice - (riskDist * tp3_RR)
 
             int forwardBar = bar_index + 25
+
+            // Quality Badge Rating
+            string qualityBadge = ""
+            if showQualityBadge
+                if riskDist <= safeLimit
+                    qualityBadge := "\n🟢 [SAFE - High R:R]"
+                else if riskDist <= acceptLimit
+                    qualityBadge := "\n🟡 [ACCEPTABLE]"
+                else
+                    qualityBadge := "\n🔴 [WIDE - SKIP!]"
 
             box obBox = box.new(obBar, obTop, forwardBar, obBottom, border_color=colorBearishActive, border_width=2, bgcolor=colorBearishFill)
 
@@ -223,7 +244,7 @@ if not na(pHigh) and trendDown
                 confLine := line.new(bar_index, obTop, bar_index, obBottom, color=color.new(colorBearishActive, 30), width=1, style=line.style_dotted)
 
             string tfName = timeframe.isminutes ? str.format("M{0}", timeframe.multiplier) : (timeframe.isdaily ? "D1" : timeframe.period)
-            string lblText = str.format("{0} SELL OB (Active)\nEntry: {1,number,#.#} - {2,number,#.#}\nSL: {3,number,#.#} (+{4,number,#.#} pts)\nTP1: {5,number,#.#} (1:{6,number,#.#}R)\nTP2: {7,number,#.#} (1:{8,number,#.#}R)\nTP3: {9,number,#.#} (1:{10,number,#.#}R)", tfName, obBottom, obTop, slPrice, slBuf, tp1Price, tp1_RR, tp2Price, tp2_RR, tp3Price, tp3_RR)
+            string lblText = str.format("{0} SELL OB (Active){1}\nRisk: {2,number,#.#} pts\nEntry: {3,number,#.#} - {4,number,#.#}\nSL: {5,number,#.#}\nTP1: {6,number,#.#} (1:{7,number,#.#}R)\nTP2: {8,number,#.#} (1:{9,number,#.#}R)\nTP3: {10,number,#.#} (1:{11,number,#.#}R)", tfName, qualityBadge, riskDist, obBottom, obTop, slPrice, tp1Price, tp1_RR, tp2Price, tp2_RR, tp3Price, tp3_RR)
             label infoLbl = label.new(bar_index, obTop, lblText, color=color.red, textcolor=color.white, style=label.style_label_down, size=size.small)
 
             line l1 = na, line l2 = na, line l3 = na
@@ -283,12 +304,24 @@ if not na(pLow) and trendUp
         float slPrice    = math.min(swingPrice, obBottom) - slBuf
         float riskDist   = entryPrice - slPrice
 
-        if riskDist > 0
+        bool passesRiskFilter = not filterWideBoxes or (riskDist <= maxAllowedRisk)
+
+        if riskDist > 0 and passesRiskFilter
             float tp1Price = entryPrice + (riskDist * tp1_RR)
             float tp2Price = entryPrice + (riskDist * tp2_RR)
             float tp3Price = entryPrice + (riskDist * tp3_RR)
 
             int forwardBar = bar_index + 25
+
+            // Quality Badge Rating
+            string qualityBadge = ""
+            if showQualityBadge
+                if riskDist <= safeLimit
+                    qualityBadge := "\n🟢 [SAFE - High R:R]"
+                else if riskDist <= acceptLimit
+                    qualityBadge := "\n🟡 [ACCEPTABLE]"
+                else
+                    qualityBadge := "\n🔴 [WIDE - SKIP!]"
 
             box obBox = box.new(obBar, obTop, forwardBar, obBottom, border_color=colorBullishActive, border_width=2, bgcolor=colorBullishFill)
 
@@ -297,7 +330,7 @@ if not na(pLow) and trendUp
                 confLine := line.new(bar_index, obTop, bar_index, obBottom, color=color.new(colorBullishActive, 30), width=1, style=line.style_dotted)
 
             string tfName = timeframe.isminutes ? str.format("M{0}", timeframe.multiplier) : (timeframe.isdaily ? "D1" : timeframe.period)
-            string lblText = str.format("{0} BUY OB (Active)\nEntry: {1,number,#.#} - {2,number,#.#}\nSL: {3,number,#.#} (-{4,number,#.#} pts)\nTP1: {5,number,#.#} (1:{6,number,#.#}R)\nTP2: {7,number,#.#} (1:{8,number,#.#}R)\nTP3: {9,number,#.#} (1:{10,number,#.#}R)", tfName, obBottom, obTop, slPrice, slBuf, tp1Price, tp1_RR, tp2Price, tp2_RR, tp3Price, tp3_RR)
+            string lblText = str.format("{0} BUY OB (Active){1}\nRisk: {2,number,#.#} pts\nEntry: {3,number,#.#} - {4,number,#.#}\nSL: {5,number,#.#}\nTP1: {6,number,#.#} (1:{7,number,#.#}R)\nTP2: {8,number,#.#} (1:{9,number,#.#}R)\nTP3: {10,number,#.#} (1:{11,number,#.#}R)", tfName, qualityBadge, riskDist, obBottom, obTop, slPrice, tp1Price, tp1_RR, tp2Price, tp2_RR, tp3Price, tp3_RR)
             label infoLbl = label.new(bar_index, obBottom, lblText, color=color.green, textcolor=color.white, style=label.style_label_up, size=size.small)
 
             line l1 = na, line l2 = na, line l3 = na
@@ -330,7 +363,6 @@ if array.size(activeZones) > 0
         OBZone z = array.get(activeZones, idx)
 
         if not z.invalidated
-            // Check for Retest
             if not z.retested
                 bool touched = false
                 if z.isBullish and low <= z.top and high >= z.bottom
@@ -345,7 +377,6 @@ if array.size(activeZones) > 0
                         box.set_bgcolor(z.boxId, colorRetestedFill)
                         box.set_border_style(z.boxId, line.style_dotted)
 
-            // Check for Invalidation
             bool broken = false
             if z.isBullish and close < z.slPrice
                 broken := true
