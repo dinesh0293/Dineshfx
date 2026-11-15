@@ -8,23 +8,23 @@ grp_smc = "=== Market Structure & Order Block Engine ==="
 pivotSpan            = input.int(8, "Swing Pivot Span (Bars)", minval=2, maxval=20, tooltip="Bars left & right to confirm institutional swing pivot.", group=grp_smc)
 minDisp              = input.float(8.0, "Base Min Displacement ($ on Gold)", minval=0.5, step=0.5, tooltip="Displacement required after pivot on H1. Automatically scales for M30 if enabled below.", group=grp_smc)
 autoScaleDisp        = input.bool(true, "Auto-scale Displacement by Timeframe (M30 vs H1)", tooltip="Scales minimum displacement: M30 ($5.00), H1 ($8.00).", group=grp_smc)
-requireBOS           = input.bool(true, "Require Break of Structure (BOS)", tooltip="Zone only triggers if the displacement impulse violently broke previous major structural swing high/low.", group=grp_smc)
+requireBOS           = input.bool(false, "Require Break of Structure (BOS)", tooltip="Leave false to catch all valid order block formations. If true, only triggers if the impulse broke a prior structural swing high/low.", group=grp_smc)
 useLastOpposing      = input.bool(true, "Use Last Opposing Candle (True SMC)", tooltip="Defines OB as the last up-candle before drop, or last down-candle before rally.", group=grp_smc)
 slBuffer             = input.float(2.0, "Stop Loss Buffer ($)", minval=0.5, step=0.5, tooltip="Buffer placed beyond swing wick for institutional invalidation.", group=grp_smc)
 
 grp_pro_filters = "=== PRO Quality & Anti-Fakeout Filters ==="
-requireFVG           = input.bool(true, "Require Fair Value Gap (Imbalance) at Displacement", tooltip="Guarantees true institutional volume by verifying an unmitigated FVG was left by the impulse leg.", group=grp_pro_filters)
-requireVolSpike      = input.bool(true, "Require Volume Surge (>1.3x 20-SMA)", tooltip="Filters out low-volume retail traps. Displacement candle volume must exceed 1.3x average volume.", group=grp_pro_filters)
+requireFVG           = input.bool(false, "Require Fair Value Gap (Imbalance) at Displacement", tooltip="Optional strict filter: displacement candle must have left an open FVG. Keep false to show standard OBs.", group=grp_pro_filters)
+requireVolSpike      = input.bool(false, "Require Volume Surge (>1.3x 20-SMA)", tooltip="Optional strict filter: displacement candle volume must exceed average volume. Note: Spot Gold on some brokers does not provide tick volume.", group=grp_pro_filters)
 volMultiplier        = input.float(1.3, "Volume Surge Multiplier", minval=1.0, maxval=3.0, step=0.1, group=grp_pro_filters)
 filterWideBoxes      = input.bool(true, "Filter / Hide Wide Dodging Boxes", tooltip="Filters out sluggish wide boxes that dodge halfway and fail to reach targets.", group=grp_pro_filters)
-maxBoxHeight         = input.float(12.0, "Max Allowed OB Height ($ on Gold)", minval=3.0, maxval=30.0, step=0.5, tooltip="Slim boxes (<= $12) have high target velocity. Boxes wider than this are filtered out as sloppy.", group=grp_pro_filters)
+maxBoxHeight         = input.float(15.0, "Max Allowed OB Height ($ on Gold)", minval=3.0, maxval=40.0, step=0.5, tooltip="Slim boxes (<= $15) have high target velocity. Boxes wider than this are filtered out as sloppy.", group=grp_pro_filters)
 
 grp_retest = "=== Smart Retest & Confirmation Entry Mode ==="
-entryMode            = input.string("Confirmation Candle", "Entry Trigger Mode", options=["Touch Limit", "Confirmation Candle", "Rejection Wick"], tooltip="Touch Limit: Triggers as soon as price touches the box edge.\nConfirmation Candle: Waits for an engulfing/rejection candle close out of the box in trade direction (Safest!).\nRejection Wick: Enters when candle wicks into the box and closes outside.", group=grp_retest)
-alertOnEntry         = input.bool(true, "Fire Distinct 'CONFIRMED ENTRY' Signal & Alert", tooltip="Emits a distinct green/red buy/sell signal tag right when price confirms departure from the OB.", group=grp_retest)
+entryMode            = input.string("Confirmation Candle", "Entry Trigger Mode", options=["Touch Limit", "Confirmation Candle", "Rejection Wick"], tooltip="1. Touch Limit: Triggers as soon as price touches the box edge.\n2. Confirmation Candle: Triggers when candle enters the box AND closes out in your trade direction.\n3. Rejection Wick: Triggers when candle wicks deep into the box and closes outside, leaving a strong rejection pin bar.", group=grp_retest)
+showEntryMarkers     = input.bool(true, "Draw Live Entry Signals & Confirmation Arrows", tooltip="Plots visible BUY/SELL ENTRY arrows on the chart when confirmation occurs.", group=grp_retest)
 
 grp_trend = "=== Multi-Timeframe Trend Filter ==="
-useDailyTrend        = input.bool(false, "Filter by Daily 50 EMA Trend", group=grp_trend)
+useDailyTrend        = input.bool(false, "Filter by Daily 50 EMA Trend (false = Show Both Buy & Sell OBs)", group=grp_trend)
 useCompletedDaily    = input.bool(true, "Use Yesterday's Closed Daily EMA (No Repaint)", tooltip="Freezes Daily EMA using yesterday's close. Prevents intraday flickering.", group=grp_trend)
 dailyEmaPeriod       = input.int(50, "Daily EMA Period", minval=10, maxval=200, group=grp_trend)
 
@@ -72,22 +72,21 @@ if autoScaleDisp
     if timeframe.isminutes
         if timeframe.multiplier <= 15
             effectiveMinDisp := 3.5
-            effectiveMaxBoxHeight := 5.0
+            effectiveMaxBoxHeight := 6.0
         else if timeframe.multiplier <= 30
             effectiveMinDisp := 5.0
-            effectiveMaxBoxHeight := 8.0
+            effectiveMaxBoxHeight := 10.0
         else if timeframe.multiplier <= 60
             effectiveMinDisp := minDisp
             effectiveMaxBoxHeight := maxBoxHeight
         else
             effectiveMinDisp := 15.0
-            effectiveMaxBoxHeight := 22.0
+            effectiveMaxBoxHeight := 25.0
     else if timeframe.isdaily
         effectiveMinDisp := 25.0
-        effectiveMaxBoxHeight := 40.0
+        effectiveMaxBoxHeight := 45.0
 
-// Volume 20-period SMA
-volSMA = ta.sma(volume, 20)
+volSMA = ta.sma(nz(volume, 1), 20)
 
 // ==============================================================================
 // 3. STABLE DAILY TREND FILTER
@@ -209,13 +208,12 @@ buyConfirmedSignal := 0.0
 sellConfirmedSignal := 0.0
 
 // ------------------------------------------------------------------------------
-// BEARISH ORDER BLOCK EVALUATION (PRO Multi-Confluence Engine)
+// BEARISH ORDER BLOCK EVALUATION
 // ------------------------------------------------------------------------------
 if not na(pHigh) and trendDown
     int pivotBar = bar_index[pivotSpan]
     float swingPrice = pHigh
 
-    // 1. Measure true displacement from pivot candle to lowest low in confirmation leg
     float impulseLow = low[0]
     int   impulseLowOffset = 0
     bool  hasVolSpike = false
@@ -225,11 +223,9 @@ if not na(pHigh) and trendDown
         if low[i] < impulseLow
             impulseLow := low[i]
             impulseLowOffset := i
-        if volume[i] >= (volSMA[i] * volMultiplier)
+        if not na(volume) and volume[i] >= (volSMA[i] * volMultiplier)
             hasVolSpike := true
 
-    // Check for Fair Value Gap (FVG / Imbalance) inside the displacement drop
-    // Bearish FVG: high of 2 bars ahead is lower than low of preceding bar
     for i = 0 to pivotSpan - 2
         if high[i] < low[i + 2]
             hasBearishFVG := true
@@ -242,7 +238,6 @@ if not na(pHigh) and trendDown
     bool bosOk          = not requireBOS or (not na(lastMajorSwingLow) and impulseLow < lastMajorSwingLow)
 
     if displacementOk and volOk and fvgOk and bosOk
-        // True SMC: Last bullish opposing candle before drop
         int obOffset = pivotSpan
         if useLastOpposing
             for k = pivotSpan to math.min(pivotSpan + 5, 50)
@@ -255,7 +250,6 @@ if not na(pHigh) and trendDown
         float obBottom = math.min(open[obOffset], close[obOffset])
         float boxHeight = obTop - obBottom
 
-        // Box Width / Slim Filter
         bool isSlimBox = boxHeight <= (effectiveMaxBoxHeight * 0.70)
         bool passesBoxFilter = not filterWideBoxes or (boxHeight <= effectiveMaxBoxHeight)
 
@@ -271,7 +265,6 @@ if not na(pHigh) and trendDown
 
                 int forwardBar = bar_index + 25
 
-                // Quality & Slim rating badge
                 string qualityTag = isSlimBox ? "⚡ [HIGH VELOCITY SLIM OB]" : "🟡 [ACCEPTABLE OB]"
 
                 box obBox = box.new(obBar, obTop, forwardBar, obBottom, border_color=colorBearishActive, border_width=2, bgcolor=colorBearishFill)
@@ -314,13 +307,12 @@ if not na(pHigh) and trendDown
                 alert(f_json("🔴 NEW BEARISH OB FORMED: " + syminfo.ticker + " " + tfName + "\n" + qualityTag + "\nEntry: " + f_n(entryPrice) + " | SL: " + f_n(slPrice) + " | TP1: " + f_n(tp1Price)), alert.freq_once_per_bar_close)
 
 // ------------------------------------------------------------------------------
-// BULLISH ORDER BLOCK EVALUATION (PRO Multi-Confluence Engine)
+// BULLISH ORDER BLOCK EVALUATION
 // ------------------------------------------------------------------------------
 if not na(pLow) and trendUp
     int pivotBar = bar_index[pivotSpan]
     float swingPrice = pLow
 
-    // 1. Measure true displacement from pivot candle to highest high in confirmation leg
     float impulseHigh = high[0]
     int   impulseHighOffset = 0
     bool  hasVolSpike = false
@@ -330,11 +322,9 @@ if not na(pLow) and trendUp
         if high[i] > impulseHigh
             impulseHigh := high[i]
             impulseHighOffset := i
-        if volume[i] >= (volSMA[i] * volMultiplier)
+        if not na(volume) and volume[i] >= (volSMA[i] * volMultiplier)
             hasVolSpike := true
 
-    // Check for Fair Value Gap (Bullish FVG)
-    // Low of 2 bars ahead is higher than high of preceding bar
     for i = 0 to pivotSpan - 2
         if low[i] > high[i + 2]
             hasBullishFVG := true
@@ -347,7 +337,6 @@ if not na(pLow) and trendUp
     bool bosOk          = not requireBOS or (not na(lastMajorSwingHigh) and impulseHigh > lastMajorSwingHigh)
 
     if displacementOk and volOk and fvgOk and bosOk
-        // True SMC: Last bearish opposing candle before rally
         int obOffset = pivotSpan
         if useLastOpposing
             for k = pivotSpan to math.min(pivotSpan + 5, 50)
@@ -360,7 +349,6 @@ if not na(pLow) and trendUp
         float obBottom = low[obOffset]
         float boxHeight = obTop - obBottom
 
-        // Box Width / Slim Filter
         bool isSlimBox = boxHeight <= (effectiveMaxBoxHeight * 0.70)
         bool passesBoxFilter = not filterWideBoxes or (boxHeight <= effectiveMaxBoxHeight)
 
@@ -444,18 +432,19 @@ if array.size(activeZones) > 0
                 bool isConfirmed = false
 
                 if entryMode == "Touch Limit"
+                    // Immediate trigger upon entering the zone
                     isConfirmed := true
                 else if entryMode == "Confirmation Candle"
-                    // Candle touched box and closed strongly in intended direction
-                    if z.isBullish and close > open and close > z.top
+                    // Candle entered the box and closed in the direction of the trade
+                    if z.isBullish and low <= z.top and close > open
                         isConfirmed := true
-                    else if not z.isBullish and close < open and close < z.bottom
+                    else if not z.isBullish and high >= z.bottom and close < open
                         isConfirmed := true
                 else if entryMode == "Rejection Wick"
-                    // Candle wicked into box but closed outside box in trade direction
-                    if z.isBullish and low <= z.top and close > z.top and (close - low) > (high - close)
+                    // Candle wicked into box and closed with strong pin bar wick
+                    if z.isBullish and low <= z.top and close >= z.bottom and (close - low) > (high - close)
                         isConfirmed := true
-                    else if not z.isBullish and high >= z.bottom and close < z.bottom and (high - close) > (close - low)
+                    else if not z.isBullish and high >= z.bottom and close <= z.top and (high - close) > (close - low)
                         isConfirmed := true
 
                 if isConfirmed
@@ -463,15 +452,15 @@ if array.size(activeZones) > 0
                     if z.isBullish
                         alertConfirmedBuy := true
                         buyConfirmedSignal := 1.0
-                        if alertOnEntry
-                            label.new(bar_index, low - (ta.atr(14) * 0.5), "BUY CONFIRMED ⚡", color=#059669, textcolor=color.white, style=label.style_label_up, size=size.small)
-                            alert(f_json("⚡ CONFIRMED BUY ENTRY: " + syminfo.ticker + "\nPrice bounced off Bullish OB!\nEnter at: " + f_n(close) + " | SL: " + f_n(z.slPrice) + " | TP1: " + f_n(z.tp1Price)), alert.freq_once_per_bar_close)
+                        if showEntryMarkers
+                            label.new(bar_index, low - (ta.atr(14) * 0.4), "BUY ENTRY ⚡\n(" + entryMode + ")", color=#059669, textcolor=color.white, style=label.style_label_up, size=size.small)
+                            alert(f_json("⚡ CONFIRMED BUY ENTRY: " + syminfo.ticker + "\nBounced off Bullish OB!\nPrice: " + f_n(close) + " | SL: " + f_n(z.slPrice) + " | TP1: " + f_n(z.tp1Price)), alert.freq_once_per_bar_close)
                     else
                         alertConfirmedSell := true
                         sellConfirmedSignal := 1.0
-                        if alertOnEntry
-                            label.new(bar_index, high + (ta.atr(14) * 0.5), "SELL CONFIRMED ⚡", color=#dc2626, textcolor=color.white, style=label.style_label_down, size=size.small)
-                            alert(f_json("⚡ CONFIRMED SELL ENTRY: " + syminfo.ticker + "\nPrice rejected Bearish OB!\nEnter at: " + f_n(close) + " | SL: " + f_n(z.slPrice) + " | TP1: " + f_n(z.tp1Price)), alert.freq_once_per_bar_close)
+                        if showEntryMarkers
+                            label.new(bar_index, high + (ta.atr(14) * 0.4), "SELL ENTRY ⚡\n(" + entryMode + ")", color=#dc2626, textcolor=color.white, style=label.style_label_down, size=size.small)
+                            alert(f_json("⚡ CONFIRMED SELL ENTRY: " + syminfo.ticker + "\nRejected Bearish OB!\nPrice: " + f_n(close) + " | SL: " + f_n(z.slPrice) + " | TP1: " + f_n(z.tp1Price)), alert.freq_once_per_bar_close)
 
             // --- C. Invalidation Detection ---
             bool broken = false
@@ -489,7 +478,6 @@ if array.size(activeZones) > 0
                 if not na(z.infoLabel)
                     label.set_text(z.infoLabel, z.isBullish ? "BUY OB (Invalidated ❌)" : "SELL OB (Invalidated ❌)")
 
-                // Erase TP lines & labels on invalidation
                 if not na(z.tp1Line)
                     line.delete(z.tp1Line)
                     z.tp1Line := na
@@ -537,8 +525,8 @@ if barstate.islast and showHUD
     table.cell(hud, 0, 3, "Entry Mode:", text_color=color.white, text_size=size.tiny)
     table.cell(hud, 1, 3, entryMode, text_color=color.green, text_size=size.tiny)
 
-    table.cell(hud, 0, 4, "FVG & Vol Confluence:", text_color=color.white, text_size=size.tiny)
-    table.cell(hud, 1, 4, (requireFVG ? "FVG ✓ " : "") + (requireVolSpike ? "VOL ✓" : ""), text_color=color.aqua, text_size=size.tiny)
+    table.cell(hud, 0, 4, "Quality Filters:", text_color=color.white, text_size=size.tiny)
+    table.cell(hud, 1, 4, (filterWideBoxes ? "Slim OB ✓ " : "") + (requireBOS ? "BOS ✓" : "Standard"), text_color=color.aqua, text_size=size.tiny)
 
     table.cell(hud, 0, 5, "Active Zones:", text_color=color.white, text_size=size.tiny)
     table.cell(hud, 1, 5, enableGarbageCleanup ? str.format("{0} / {1}", activeCount, maxActiveZones) : str.format("{0} (All kept)", activeCount), text_color=color.white, text_size=size.tiny)
@@ -560,9 +548,9 @@ plot(sTP2, "SELL_TP2_PRICE", display=display.data_window)
 // ==============================================================================
 // 9. COMPREHENSIVE ACTIONABLE ALERTS
 // ==============================================================================
-alertcondition(alertConfirmedBuy, "Confirmed BUY Entry Signal", "Price bounced off Bullish OB with confirmation candle on Gold!")
-alertcondition(alertConfirmedSell, "Confirmed SELL Entry Signal", "Price rejected Bearish OB with confirmation candle on Gold!")
-alertcondition(alertBullishFormed, "New Bullish Order Block Formed", "New High-Quality Bullish OB formed with FVG & Volume!")
-alertcondition(alertBearishFormed, "New Bearish Order Block Formed", "New High-Quality Bearish OB formed with FVG & Volume!")
+alertcondition(alertConfirmedBuy, "Confirmed BUY Entry Signal", "Price bounced off Bullish OB with confirmation on Gold!")
+alertcondition(alertConfirmedSell, "Confirmed SELL Entry Signal", "Price rejected Bearish OB with confirmation on Gold!")
+alertcondition(alertBullishFormed, "New Bullish Order Block Formed", "New Bullish OB formed!")
+alertcondition(alertBearishFormed, "New Bearish Order Block Formed", "New Bearish OB formed!")
 alertcondition(alertZoneRetested, "Price Retesting OB Zone", "Price entered an active Order Block zone!")
 alertcondition(alertZoneInvalidated, "OB Zone Invalidated", "An active Order Block was violated and invalidated!")
