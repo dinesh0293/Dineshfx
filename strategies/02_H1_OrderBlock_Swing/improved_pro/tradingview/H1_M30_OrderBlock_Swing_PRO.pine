@@ -1,0 +1,568 @@
+//@version=6
+indicator("H1/M30 Institutional Order Block & Swing Trader [Dineshfx] (Improved PRO)", overlay=true, max_boxes_count=100, max_labels_count=200, max_lines_count=200)
+
+// ==============================================================================
+// 1. INPUT CONFIGURATION & FILTERS
+// ==============================================================================
+grp_smc = "=== Market Structure & Order Block Engine ==="
+pivotSpan            = input.int(8, "Swing Pivot Span (Bars)", minval=2, maxval=20, tooltip="Bars left & right to confirm institutional swing pivot.", group=grp_smc)
+minDisp              = input.float(8.0, "Base Min Displacement ($ on Gold)", minval=0.5, step=0.5, tooltip="Displacement required after pivot on H1. Automatically scales for M30 if enabled below.", group=grp_smc)
+autoScaleDisp        = input.bool(true, "Auto-scale Displacement by Timeframe (M30 vs H1)", tooltip="Scales minimum displacement: M30 ($5.00), H1 ($8.00).", group=grp_smc)
+requireBOS           = input.bool(true, "Require Break of Structure (BOS)", tooltip="Zone only triggers if the displacement impulse violently broke previous major structural swing high/low.", group=grp_smc)
+useLastOpposing      = input.bool(true, "Use Last Opposing Candle (True SMC)", tooltip="Defines OB as the last up-candle before drop, or last down-candle before rally.", group=grp_smc)
+slBuffer             = input.float(2.0, "Stop Loss Buffer ($)", minval=0.5, step=0.5, tooltip="Buffer placed beyond swing wick for institutional invalidation.", group=grp_smc)
+
+grp_pro_filters = "=== PRO Quality & Anti-Fakeout Filters ==="
+requireFVG           = input.bool(true, "Require Fair Value Gap (Imbalance) at Displacement", tooltip="Guarantees true institutional volume by verifying an unmitigated FVG was left by the impulse leg.", group=grp_pro_filters)
+requireVolSpike      = input.bool(true, "Require Volume Surge (>1.3x 20-SMA)", tooltip="Filters out low-volume retail traps. Displacement candle volume must exceed 1.3x average volume.", group=grp_pro_filters)
+volMultiplier        = input.float(1.3, "Volume Surge Multiplier", minval=1.0, maxval=3.0, step=0.1, group=grp_pro_filters)
+filterWideBoxes      = input.bool(true, "Filter / Hide Wide Dodging Boxes", tooltip="Filters out sluggish wide boxes that dodge halfway and fail to reach targets.", group=grp_pro_filters)
+maxBoxHeight         = input.float(12.0, "Max Allowed OB Height ($ on Gold)", minval=3.0, maxval=30.0, step=0.5, tooltip="Slim boxes (<= $12) have high target velocity. Boxes wider than this are filtered out as sloppy.", group=grp_pro_filters)
+
+grp_retest = "=== Smart Retest & Confirmation Entry Mode ==="
+entryMode            = input.string("Confirmation Candle", "Entry Trigger Mode", options=["Touch Limit", "Confirmation Candle", "Rejection Wick"], tooltip="Touch Limit: Triggers as soon as price touches the box edge.\nConfirmation Candle: Waits for an engulfing/rejection candle close out of the box in trade direction (Safest!).\nRejection Wick: Enters when candle wicks into the box and closes outside.", group=grp_retest)
+alertOnEntry         = input.bool(true, "Fire Distinct 'CONFIRMED ENTRY' Signal & Alert", tooltip="Emits a distinct green/red buy/sell signal tag right when price confirms departure from the OB.", group=grp_retest)
+
+grp_trend = "=== Multi-Timeframe Trend Filter ==="
+useDailyTrend        = input.bool(false, "Filter by Daily 50 EMA Trend", group=grp_trend)
+useCompletedDaily    = input.bool(true, "Use Yesterday's Closed Daily EMA (No Repaint)", tooltip="Freezes Daily EMA using yesterday's close. Prevents intraday flickering.", group=grp_trend)
+dailyEmaPeriod       = input.int(50, "Daily EMA Period", minval=10, maxval=200, group=grp_trend)
+
+grp_targets = "=== Multi-Tier Targets (R:R) ==="
+tp1_RR               = input.float(1.5, "TP 1 Target (R:R) [Quick Scale / BE Lock]", minval=0.5, maxval=5.0, step=0.1, group=grp_targets)
+tp2_RR               = input.float(2.5, "TP 2 Target (R:R) [Primary Swing Target]", minval=1.0, maxval=8.0, step=0.1, group=grp_targets)
+tp3_RR               = input.float(4.0, "TP 3 Target (R:R) [Macro Runner]", minval=1.5, maxval=10.0, step=0.5, group=grp_targets)
+showTPLines          = input.bool(true, "Draw TP Target Lines & Tags", group=grp_targets)
+showBOSLines         = input.bool(true, "Draw BOS Break Lines & Badges", group=grp_targets)
+
+grp_lifecycle = "=== Zone Management & Cleanup ==="
+enableGarbageCleanup = input.bool(true, "Enable Garbage Collection (Auto-delete Oldest Zones)", group=grp_lifecycle)
+maxActiveZones       = input.int(10, "Max Active Zones Limit", minval=2, maxval=50, group=grp_lifecycle)
+fadeRetestedZones    = input.bool(true, "Fade Zones on Retest (Visual Distinction)", group=grp_lifecycle)
+showConfirmationMark = input.bool(true, "Mark Confirmation Bar (No Delayed Repainting)", tooltip="Draws confirmation boundary so delay between pivot and confirmation is visible.", group=grp_lifecycle)
+showHUD              = input.bool(true, "Show Info Dashboard (Top Right)", group=grp_lifecycle)
+
+grp_visual = "=== Color & Visual Styling ==="
+colorBullishActive   = input.color(#059669, "Bullish OB Border (Active)", group=grp_visual)
+colorBullishFill     = input.color(color.new(#10b981, 80), "Bullish OB Fill (Active)", group=grp_visual)
+colorBearishActive   = input.color(#eab308, "Bearish OB Border (Active)", group=grp_visual)
+colorBearishFill     = input.color(color.new(#facc15, 80), "Bearish OB Fill (Active)", group=grp_visual)
+colorRetestedFill    = input.color(color.new(#64748b, 88), "Retested Zone Fill (Faded)", group=grp_visual)
+colorInvalidFill     = input.color(color.new(#ef4444, 92), "Invalidated Zone Fill", group=grp_visual)
+colorTP1             = input.color(#4ade80, "TP 1 Line (+1.5R)", group=grp_visual)
+colorTP2             = input.color(#22c55e, "TP 2 Line (+2.5R)", group=grp_visual)
+colorTP3             = input.color(#15803d, "TP 3 Line (+4.0R)", group=grp_visual)
+
+grp_alert = "=== Telegram & Webhook Alerts ==="
+tgChatId             = input.string("YOUR_CHAT_ID", "Telegram Chat ID", group=grp_alert, tooltip="Numeric chat id from @userinfobot (or -100... for a channel/group).")
+useWebhookJson       = input.bool(false, "Webhook/Telegram JSON format (leave OFF for app push & email)", group=grp_alert)
+
+f_json(string txt) =>
+    useWebhookJson ? '{"chat_id":"' + tgChatId + '","text":"' + str.replace_all(txt, "\n", "\\n") + '"}' : txt
+
+f_n(float x) => str.tostring(x, "#.##")
+
+// ==============================================================================
+// 2. TIMEFRAME-ADAPTIVE DISPLACEMENT & SLIM THRESHOLD
+// ==============================================================================
+float effectiveMinDisp = minDisp
+float effectiveMaxBoxHeight = maxBoxHeight
+
+if autoScaleDisp
+    if timeframe.isminutes
+        if timeframe.multiplier <= 15
+            effectiveMinDisp := 3.5
+            effectiveMaxBoxHeight := 5.0
+        else if timeframe.multiplier <= 30
+            effectiveMinDisp := 5.0
+            effectiveMaxBoxHeight := 8.0
+        else if timeframe.multiplier <= 60
+            effectiveMinDisp := minDisp
+            effectiveMaxBoxHeight := maxBoxHeight
+        else
+            effectiveMinDisp := 15.0
+            effectiveMaxBoxHeight := 22.0
+    else if timeframe.isdaily
+        effectiveMinDisp := 25.0
+        effectiveMaxBoxHeight := 40.0
+
+// Volume 20-period SMA
+volSMA = ta.sma(volume, 20)
+
+// ==============================================================================
+// 3. STABLE DAILY TREND FILTER
+// ==============================================================================
+dailyCloseSeries = useCompletedDaily ? close[1] : close
+dailyEmaRaw      = ta.ema(dailyCloseSeries, dailyEmaPeriod)
+dailyEma         = request.security(syminfo.tickerid, "D", dailyEmaRaw, lookahead=barmerge.lookahead_off)
+
+plot(useDailyTrend ? dailyEma : na, "Daily 50 EMA", color=color.new(color.orange, 25), linewidth=2)
+
+trendUp   = not useDailyTrend or (close > dailyEma)
+trendDown = not useDailyTrend or (close < dailyEma)
+
+// ==============================================================================
+// 4. USER DEFINED TYPE & STORAGE
+// ==============================================================================
+type OBZone
+    box     boxId
+    line    tp1Line
+    line    tp2Line
+    line    tp3Line
+    label   infoLabel
+    label   tp1Label
+    label   tp2Label
+    label   tp3Label
+    line    bosLine
+    label   bosLabel
+    line    confirmLine
+    bool    isBullish
+    float   top
+    float   bottom
+    float   boxHeight
+    float   slPrice
+    float   entryPrice
+    float   tp1Price
+    float   tp2Price
+    float   tp3Price
+    int     startBar
+    int     confirmBar
+    bool    retested
+    bool    confirmedEntry
+    bool    invalidated
+
+var OBZone[] activeZones = array.new<OBZone>()
+
+cleanOldestZone() =>
+    if enableGarbageCleanup and array.size(activeZones) > maxActiveZones
+        OBZone oldest = array.shift(activeZones)
+        if not na(oldest.boxId)
+            box.delete(oldest.boxId)
+        if not na(oldest.tp1Line)
+            line.delete(oldest.tp1Line)
+        if not na(oldest.tp2Line)
+            line.delete(oldest.tp2Line)
+        if not na(oldest.tp3Line)
+            line.delete(oldest.tp3Line)
+        if not na(oldest.infoLabel)
+            label.delete(oldest.infoLabel)
+        if not na(oldest.tp1Label)
+            label.delete(oldest.tp1Label)
+        if not na(oldest.tp2Label)
+            label.delete(oldest.tp2Label)
+        if not na(oldest.tp3Label)
+            label.delete(oldest.tp3Label)
+        if not na(oldest.bosLine)
+            line.delete(oldest.bosLine)
+        if not na(oldest.bosLabel)
+            label.delete(oldest.bosLabel)
+        if not na(oldest.confirmLine)
+            line.delete(oldest.confirmLine)
+
+// ==============================================================================
+// 5. STRUCTURE & SWING DETECTION
+// ==============================================================================
+pHigh = ta.pivothigh(high, pivotSpan, pivotSpan)
+pLow  = ta.pivotlow(low, pivotSpan, pivotSpan)
+
+var float lastMajorSwingHigh = na
+var float lastMajorSwingLow  = na
+var int   lastSwingHighBar   = na
+var int   lastSwingLowBar    = na
+
+if not na(pHigh)
+    lastMajorSwingHigh := pHigh
+    lastSwingHighBar   := bar_index[pivotSpan]
+
+if not na(pLow)
+    lastMajorSwingLow  := pLow
+    lastSwingLowBar    := bar_index[pivotSpan]
+
+// Alert Flags for current bar
+var bool alertBullishFormed    = false
+var bool alertBearishFormed    = false
+var bool alertZoneRetested     = false
+var bool alertConfirmedBuy     = false
+var bool alertConfirmedSell    = false
+var bool alertZoneInvalidated  = false
+alertBullishFormed    := false
+alertBearishFormed    := false
+alertZoneRetested     := false
+alertConfirmedBuy     := false
+alertConfirmedSell    := false
+alertZoneInvalidated  := false
+
+// Variables for data window plots (Vela / Webhook automation)
+var float sEntry = na
+var float sSL = na
+var float sTP1 = na
+var float sTP2 = na
+var float sTP3 = na
+var float bEntry = na
+var float bSL = na
+var float bTP1 = na
+var float bTP2 = na
+var float bTP3 = na
+var float buyConfirmedSignal = 0.0
+var float sellConfirmedSignal = 0.0
+buyConfirmedSignal := 0.0
+sellConfirmedSignal := 0.0
+
+// ------------------------------------------------------------------------------
+// BEARISH ORDER BLOCK EVALUATION (PRO Multi-Confluence Engine)
+// ------------------------------------------------------------------------------
+if not na(pHigh) and trendDown
+    int pivotBar = bar_index[pivotSpan]
+    float swingPrice = pHigh
+
+    // 1. Measure true displacement from pivot candle to lowest low in confirmation leg
+    float impulseLow = low[0]
+    int   impulseLowOffset = 0
+    bool  hasVolSpike = false
+    bool  hasBearishFVG = false
+
+    for i = 0 to pivotSpan - 1
+        if low[i] < impulseLow
+            impulseLow := low[i]
+            impulseLowOffset := i
+        if volume[i] >= (volSMA[i] * volMultiplier)
+            hasVolSpike := true
+
+    // Check for Fair Value Gap (FVG / Imbalance) inside the displacement drop
+    // Bearish FVG: high of 2 bars ahead is lower than low of preceding bar
+    for i = 0 to pivotSpan - 2
+        if high[i] < low[i + 2]
+            hasBearishFVG := true
+            break
+
+    float displacement = swingPrice - impulseLow
+    bool displacementOk = displacement >= effectiveMinDisp
+    bool volOk          = not requireVolSpike or hasVolSpike
+    bool fvgOk          = not requireFVG or hasBearishFVG
+    bool bosOk          = not requireBOS or (not na(lastMajorSwingLow) and impulseLow < lastMajorSwingLow)
+
+    if displacementOk and volOk and fvgOk and bosOk
+        // True SMC: Last bullish opposing candle before drop
+        int obOffset = pivotSpan
+        if useLastOpposing
+            for k = pivotSpan to math.min(pivotSpan + 5, 50)
+                if close[k] > open[k]
+                    obOffset := k
+                    break
+
+        int obBar = bar_index[obOffset]
+        float obTop    = high[obOffset]
+        float obBottom = math.min(open[obOffset], close[obOffset])
+        float boxHeight = obTop - obBottom
+
+        // Box Width / Slim Filter
+        bool isSlimBox = boxHeight <= (effectiveMaxBoxHeight * 0.70)
+        bool passesBoxFilter = not filterWideBoxes or (boxHeight <= effectiveMaxBoxHeight)
+
+        if passesBoxFilter
+            float entryPrice = obBottom
+            float slPrice    = math.max(swingPrice, obTop) + slBuffer
+            float riskDist   = slPrice - entryPrice
+
+            if riskDist > 0
+                float tp1Price = entryPrice - (riskDist * tp1_RR)
+                float tp2Price = entryPrice - (riskDist * tp2_RR)
+                float tp3Price = entryPrice - (riskDist * tp3_RR)
+
+                int forwardBar = bar_index + 25
+
+                // Quality & Slim rating badge
+                string qualityTag = isSlimBox ? "⚡ [HIGH VELOCITY SLIM OB]" : "🟡 [ACCEPTABLE OB]"
+
+                box obBox = box.new(obBar, obTop, forwardBar, obBottom, border_color=colorBearishActive, border_width=2, bgcolor=colorBearishFill)
+
+                line confLine = na
+                if showConfirmationMark
+                    confLine := line.new(bar_index, obTop, bar_index, obBottom, color=color.new(colorBearishActive, 30), width=1, style=line.style_dotted)
+
+                string tfName = timeframe.isminutes ? str.format("M{0}", timeframe.multiplier) : (timeframe.isdaily ? "D1" : timeframe.period)
+                string lblText = str.format("{0} SELL OB (Active)\n{1}\nHeight: ${2,number,#.##} | Risk: ${3,number,#.##}\nEntry: {4,number,#.##} - {5,number,#.##}\nSL: {6,number,#.##}\nTP1: {7,number,#.##} (1:{8,number,#.#}R)\nTP2: {9,number,#.##} (1:{10,number,#.#}R)\nTP3: {11,number,#.##} (1:{12,number,#.#}R)", tfName, qualityTag, boxHeight, riskDist, obBottom, obTop, slPrice, tp1Price, tp1_RR, tp2Price, tp2_RR, tp3Price, tp3_RR)
+                label infoLbl = label.new(bar_index, obTop, lblText, color=color.red, textcolor=color.white, style=label.style_label_down, size=size.small)
+
+                line l1 = na, line l2 = na, line l3 = na
+                label t1 = na, label t2 = na, label t3 = na
+                if showTPLines
+                    l1 := line.new(bar_index, tp1Price, forwardBar, tp1Price, color=colorTP1, width=1, style=line.style_dashed)
+                    t1 := label.new(forwardBar, tp1Price, str.format("TP1: {0,number,#.##} (1:{1,number,#.#}R)", tp1Price, tp1_RR), color=color.new(#16a34a, 0), textcolor=color.white, style=label.style_label_left, size=size.tiny)
+                    l2 := line.new(bar_index, tp2Price, forwardBar, tp2Price, color=colorTP2, width=1, style=line.style_dashed)
+                    t2 := label.new(forwardBar, tp2Price, str.format("TP2: {0,number,#.##} (1:{1,number,#.#}R)", tp2Price, tp2_RR), color=color.new(#15803d, 0), textcolor=color.white, style=label.style_label_left, size=size.tiny)
+                    l3 := line.new(bar_index, tp3Price, forwardBar, tp3Price, color=colorTP3, width=2, style=line.style_dashed)
+                    t3 := label.new(forwardBar, tp3Price, str.format("TP3: {0,number,#.##} (1:{1,number,#.#}R)", tp3Price, tp3_RR), color=color.new(#14532d, 0), textcolor=color.white, style=label.style_label_left, size=size.tiny)
+
+                line bosL = na
+                label bosB = na
+                if showBOSLines and not na(lastMajorSwingLow) and impulseLow < lastMajorSwingLow
+                    bosL := line.new(lastSwingLowBar, lastMajorSwingLow, bar_index - impulseLowOffset, lastMajorSwingLow, color=color.new(color.white, 30), width=1, style=line.style_dashed)
+                    bosB := label.new(bar_index - impulseLowOffset, lastMajorSwingLow, "BOS", color=color.blue, textcolor=color.white, style=label.style_label_center, size=size.tiny)
+
+                sEntry := entryPrice
+                sSL := slPrice
+                sTP1 := tp1Price
+                sTP2 := tp2Price
+                sTP3 := tp3Price
+
+                OBZone newZone = OBZone.new(obBox, l1, l2, l3, infoLbl, t1, t2, t3, bosL, bosB, confLine, false, obTop, obBottom, boxHeight, slPrice, entryPrice, tp1Price, tp2Price, tp3Price, obBar, bar_index, false, false, false)
+                array.push(activeZones, newZone)
+                cleanOldestZone()
+
+                alertBearishFormed := true
+                alert(f_json("🔴 NEW BEARISH OB FORMED: " + syminfo.ticker + " " + tfName + "\n" + qualityTag + "\nEntry: " + f_n(entryPrice) + " | SL: " + f_n(slPrice) + " | TP1: " + f_n(tp1Price)), alert.freq_once_per_bar_close)
+
+// ------------------------------------------------------------------------------
+// BULLISH ORDER BLOCK EVALUATION (PRO Multi-Confluence Engine)
+// ------------------------------------------------------------------------------
+if not na(pLow) and trendUp
+    int pivotBar = bar_index[pivotSpan]
+    float swingPrice = pLow
+
+    // 1. Measure true displacement from pivot candle to highest high in confirmation leg
+    float impulseHigh = high[0]
+    int   impulseHighOffset = 0
+    bool  hasVolSpike = false
+    bool  hasBullishFVG = false
+
+    for i = 0 to pivotSpan - 1
+        if high[i] > impulseHigh
+            impulseHigh := high[i]
+            impulseHighOffset := i
+        if volume[i] >= (volSMA[i] * volMultiplier)
+            hasVolSpike := true
+
+    // Check for Fair Value Gap (Bullish FVG)
+    // Low of 2 bars ahead is higher than high of preceding bar
+    for i = 0 to pivotSpan - 2
+        if low[i] > high[i + 2]
+            hasBullishFVG := true
+            break
+
+    float displacement = impulseHigh - swingPrice
+    bool displacementOk = displacement >= effectiveMinDisp
+    bool volOk          = not requireVolSpike or hasVolSpike
+    bool fvgOk          = not requireFVG or hasBullishFVG
+    bool bosOk          = not requireBOS or (not na(lastMajorSwingHigh) and impulseHigh > lastMajorSwingHigh)
+
+    if displacementOk and volOk and fvgOk and bosOk
+        // True SMC: Last bearish opposing candle before rally
+        int obOffset = pivotSpan
+        if useLastOpposing
+            for k = pivotSpan to math.min(pivotSpan + 5, 50)
+                if close[k] < open[k]
+                    obOffset := k
+                    break
+
+        int obBar = bar_index[obOffset]
+        float obTop    = math.max(open[obOffset], close[obOffset])
+        float obBottom = low[obOffset]
+        float boxHeight = obTop - obBottom
+
+        // Box Width / Slim Filter
+        bool isSlimBox = boxHeight <= (effectiveMaxBoxHeight * 0.70)
+        bool passesBoxFilter = not filterWideBoxes or (boxHeight <= effectiveMaxBoxHeight)
+
+        if passesBoxFilter
+            float entryPrice = obTop
+            float slPrice    = math.min(swingPrice, obBottom) - slBuffer
+            float riskDist   = entryPrice - slPrice
+
+            if riskDist > 0
+                float tp1Price = entryPrice + (riskDist * tp1_RR)
+                float tp2Price = entryPrice + (riskDist * tp2_RR)
+                float tp3Price = entryPrice + (riskDist * tp3_RR)
+
+                int forwardBar = bar_index + 25
+
+                string qualityTag = isSlimBox ? "⚡ [HIGH VELOCITY SLIM OB]" : "🟡 [ACCEPTABLE OB]"
+
+                box obBox = box.new(obBar, obTop, forwardBar, obBottom, border_color=colorBullishActive, border_width=2, bgcolor=colorBullishFill)
+
+                line confLine = na
+                if showConfirmationMark
+                    confLine := line.new(bar_index, obTop, bar_index, obBottom, color=color.new(colorBullishActive, 30), width=1, style=line.style_dotted)
+
+                string tfName = timeframe.isminutes ? str.format("M{0}", timeframe.multiplier) : (timeframe.isdaily ? "D1" : timeframe.period)
+                string lblText = str.format("{0} BUY OB (Active)\n{1}\nHeight: ${2,number,#.##} | Risk: ${3,number,#.##}\nEntry: {4,number,#.##} - {5,number,#.##}\nSL: {6,number,#.##}\nTP1: {7,number,#.##} (1:{8,number,#.#}R)\nTP2: {9,number,#.##} (1:{10,number,#.#}R)\nTP3: {11,number,#.##} (1:{12,number,#.#}R)", tfName, qualityTag, boxHeight, riskDist, obBottom, obTop, slPrice, tp1Price, tp1_RR, tp2Price, tp2_RR, tp3Price, tp3_RR)
+                label infoLbl = label.new(bar_index, obBottom, lblText, color=color.green, textcolor=color.white, style=label.style_label_up, size=size.small)
+
+                line l1 = na, line l2 = na, line l3 = na
+                label t1 = na, label t2 = na, label t3 = na
+                if showTPLines
+                    l1 := line.new(bar_index, tp1Price, forwardBar, tp1Price, color=colorTP1, width=1, style=line.style_dashed)
+                    t1 := label.new(forwardBar, tp1Price, str.format("TP1: {0,number,#.##} (1:{1,number,#.#}R)", tp1Price, tp1_RR), color=color.new(#16a34a, 0), textcolor=color.white, style=label.style_label_left, size=size.tiny)
+                    l2 := line.new(bar_index, tp2Price, forwardBar, tp2Price, color=colorTP2, width=1, style=line.style_dashed)
+                    t2 := label.new(forwardBar, tp2Price, str.format("TP2: {0,number,#.##} (1:{1,number,#.#}R)", tp2Price, tp2_RR), color=color.new(#15803d, 0), textcolor=color.white, style=label.style_label_left, size=size.tiny)
+                    l3 := line.new(bar_index, tp3Price, forwardBar, tp3Price, color=colorTP3, width=2, style=line.style_dashed)
+                    t3 := label.new(forwardBar, tp3Price, str.format("TP3: {0,number,#.##} (1:{1,number,#.#}R)", tp3Price, tp3_RR), color=color.new(#14532d, 0), textcolor=color.white, style=label.style_label_left, size=size.tiny)
+
+                line bosL = na
+                label bosB = na
+                if showBOSLines and not na(lastMajorSwingHigh) and impulseHigh > lastMajorSwingHigh
+                    bosL := line.new(lastSwingHighBar, lastMajorSwingHigh, bar_index - impulseHighOffset, lastMajorSwingHigh, color=color.new(color.white, 30), width=1, style=line.style_dashed)
+                    bosB := label.new(bar_index - impulseHighOffset, lastMajorSwingHigh, "BOS", color=color.blue, textcolor=color.white, style=label.style_label_center, size=size.tiny)
+
+                bEntry := entryPrice
+                bSL := slPrice
+                bTP1 := tp1Price
+                bTP2 := tp2Price
+                bTP3 := tp3Price
+
+                OBZone newZone = OBZone.new(obBox, l1, l2, l3, infoLbl, t1, t2, t3, bosL, bosB, confLine, true, obTop, obBottom, boxHeight, slPrice, entryPrice, tp1Price, tp2Price, tp3Price, obBar, bar_index, false, false, false)
+                array.push(activeZones, newZone)
+                cleanOldestZone()
+
+                alertBullishFormed := true
+                alert(f_json("🟢 NEW BULLISH OB FORMED: " + syminfo.ticker + " " + tfName + "\n" + qualityTag + "\nEntry: " + f_n(entryPrice) + " | SL: " + f_n(slPrice) + " | TP1: " + f_n(tp1Price)), alert.freq_once_per_bar_close)
+
+// ==============================================================================
+// 6. PRO CONFIRMED ENTRY ENGINE & ZONE LIFECYCLE
+// ==============================================================================
+if array.size(activeZones) > 0
+    for idx = 0 to array.size(activeZones) - 1
+        OBZone z = array.get(activeZones, idx)
+
+        if not z.invalidated
+            // --- A. Retest Detection ---
+            bool touched = false
+            if z.isBullish and low <= z.top and high >= z.bottom
+                touched := true
+            else if not z.isBullish and high >= z.bottom and low <= z.top
+                touched := true
+
+            if touched and not z.retested
+                z.retested := true
+                alertZoneRetested := true
+                if fadeRetestedZones and not na(z.boxId)
+                    box.set_bgcolor(z.boxId, colorRetestedFill)
+                    box.set_border_style(z.boxId, line.style_dotted)
+
+            // --- B. Confirmed Entry Detection (Anti-Fakeout Engine) ---
+            if z.retested and not z.confirmedEntry
+                bool isConfirmed = false
+
+                if entryMode == "Touch Limit"
+                    isConfirmed := true
+                else if entryMode == "Confirmation Candle"
+                    // Candle touched box and closed strongly in intended direction
+                    if z.isBullish and close > open and close > z.top
+                        isConfirmed := true
+                    else if not z.isBullish and close < open and close < z.bottom
+                        isConfirmed := true
+                else if entryMode == "Rejection Wick"
+                    // Candle wicked into box but closed outside box in trade direction
+                    if z.isBullish and low <= z.top and close > z.top and (close - low) > (high - close)
+                        isConfirmed := true
+                    else if not z.isBullish and high >= z.bottom and close < z.bottom and (high - close) > (close - low)
+                        isConfirmed := true
+
+                if isConfirmed
+                    z.confirmedEntry := true
+                    if z.isBullish
+                        alertConfirmedBuy := true
+                        buyConfirmedSignal := 1.0
+                        if alertOnEntry
+                            label.new(bar_index, low - (ta.atr(14) * 0.5), "BUY CONFIRMED ⚡", color=#059669, textcolor=color.white, style=label.style_label_up, size=size.small)
+                            alert(f_json("⚡ CONFIRMED BUY ENTRY: " + syminfo.ticker + "\nPrice bounced off Bullish OB!\nEnter at: " + f_n(close) + " | SL: " + f_n(z.slPrice) + " | TP1: " + f_n(z.tp1Price)), alert.freq_once_per_bar_close)
+                    else
+                        alertConfirmedSell := true
+                        sellConfirmedSignal := 1.0
+                        if alertOnEntry
+                            label.new(bar_index, high + (ta.atr(14) * 0.5), "SELL CONFIRMED ⚡", color=#dc2626, textcolor=color.white, style=label.style_label_down, size=size.small)
+                            alert(f_json("⚡ CONFIRMED SELL ENTRY: " + syminfo.ticker + "\nPrice rejected Bearish OB!\nEnter at: " + f_n(close) + " | SL: " + f_n(z.slPrice) + " | TP1: " + f_n(z.tp1Price)), alert.freq_once_per_bar_close)
+
+            // --- C. Invalidation Detection ---
+            bool broken = false
+            if z.isBullish and close < z.slPrice
+                broken := true
+            else if not z.isBullish and close > z.slPrice
+                broken := true
+
+            if broken
+                z.invalidated := true
+                alertZoneInvalidated := true
+                if not na(z.boxId)
+                    box.set_bgcolor(z.boxId, colorInvalidFill)
+                    box.set_border_style(z.boxId, line.style_dashed)
+                if not na(z.infoLabel)
+                    label.set_text(z.infoLabel, z.isBullish ? "BUY OB (Invalidated ❌)" : "SELL OB (Invalidated ❌)")
+
+                // Erase TP lines & labels on invalidation
+                if not na(z.tp1Line)
+                    line.delete(z.tp1Line)
+                    z.tp1Line := na
+                if not na(z.tp2Line)
+                    line.delete(z.tp2Line)
+                    z.tp2Line := na
+                if not na(z.tp3Line)
+                    line.delete(z.tp3Line)
+                    z.tp3Line := na
+                if not na(z.tp1Label)
+                    label.delete(z.tp1Label)
+                    z.tp1Label := na
+                if not na(z.tp2Label)
+                    label.delete(z.tp2Label)
+                    z.tp2Label := na
+                if not na(z.tp3Label)
+                    label.delete(z.tp3Label)
+                    z.tp3Label := na
+
+// ==============================================================================
+// 7. DASHBOARD HUD (Top Right Info Table)
+// ==============================================================================
+var table hud = table.new(position.top_right, 2, 6, bgcolor=color.new(#0f172a, 15), border_color=#334155, border_width=1)
+if barstate.islast and showHUD
+    string trendText = trendUp ? "Uptrend 🟢" : "Downtrend 🔴"
+    color trendColor = trendUp ? #22c55e : #ef4444
+    int activeCount = 0
+    if array.size(activeZones) > 0
+        for i = 0 to array.size(activeZones) - 1
+            OBZone z = array.get(activeZones, i)
+            if not z.invalidated
+                activeCount += 1
+
+    string currentTF = timeframe.isminutes ? str.format("M{0}", timeframe.multiplier) : (timeframe.isdaily ? "D1" : timeframe.period)
+
+    table.cell(hud, 0, 0, "Institutional OB [PRO]", bgcolor=#1e293b, text_color=color.yellow, text_size=size.small)
+    table.cell(hud, 1, 0, str.format("TF: {0}", currentTF), bgcolor=#1e293b, text_color=color.aqua, text_size=size.small)
+
+    table.cell(hud, 0, 1, str.format("Daily 50 EMA: {0,number,#.##}", dailyEma), text_color=trendColor, text_size=size.tiny)
+    table.cell(hud, 1, 1, trendText, text_color=trendColor, text_size=size.tiny)
+
+    table.cell(hud, 0, 2, "Displacement / Max Box:", text_color=color.white, text_size=size.tiny)
+    table.cell(hud, 1, 2, str.format("${0,number,#.##} / ${1,number,#.##}", effectiveMinDisp, effectiveMaxBoxHeight), text_color=color.yellow, text_size=size.tiny)
+
+    table.cell(hud, 0, 3, "Entry Mode:", text_color=color.white, text_size=size.tiny)
+    table.cell(hud, 1, 3, entryMode, text_color=color.green, text_size=size.tiny)
+
+    table.cell(hud, 0, 4, "FVG & Vol Confluence:", text_color=color.white, text_size=size.tiny)
+    table.cell(hud, 1, 4, (requireFVG ? "FVG ✓ " : "") + (requireVolSpike ? "VOL ✓" : ""), text_color=color.aqua, text_size=size.tiny)
+
+    table.cell(hud, 0, 5, "Active Zones:", text_color=color.white, text_size=size.tiny)
+    table.cell(hud, 1, 5, enableGarbageCleanup ? str.format("{0} / {1}", activeCount, maxActiveZones) : str.format("{0} (All kept)", activeCount), text_color=color.white, text_size=size.tiny)
+
+// ==============================================================================
+// 8. PLOTTED DATA WINDOW SIGNALS (For Automation / Vela Integration)
+// ==============================================================================
+plot(buyConfirmedSignal, "BUY_CONFIRMED_SIGNAL", color=color.green, display=display.data_window)
+plot(sellConfirmedSignal, "SELL_CONFIRMED_SIGNAL", color=color.red, display=display.data_window)
+plot(bEntry, "BUY_ENTRY_PRICE", display=display.data_window)
+plot(bSL, "BUY_SL_PRICE", display=display.data_window)
+plot(bTP1, "BUY_TP1_PRICE", display=display.data_window)
+plot(bTP2, "BUY_TP2_PRICE", display=display.data_window)
+plot(sEntry, "SELL_ENTRY_PRICE", display=display.data_window)
+plot(sSL, "SELL_SL_PRICE", display=display.data_window)
+plot(sTP1, "SELL_TP1_PRICE", display=display.data_window)
+plot(sTP2, "SELL_TP2_PRICE", display=display.data_window)
+
+// ==============================================================================
+// 9. COMPREHENSIVE ACTIONABLE ALERTS
+// ==============================================================================
+alertcondition(alertConfirmedBuy, "Confirmed BUY Entry Signal", "Price bounced off Bullish OB with confirmation candle on Gold!")
+alertcondition(alertConfirmedSell, "Confirmed SELL Entry Signal", "Price rejected Bearish OB with confirmation candle on Gold!")
+alertcondition(alertBullishFormed, "New Bullish Order Block Formed", "New High-Quality Bullish OB formed with FVG & Volume!")
+alertcondition(alertBearishFormed, "New Bearish Order Block Formed", "New High-Quality Bearish OB formed with FVG & Volume!")
+alertcondition(alertZoneRetested, "Price Retesting OB Zone", "Price entered an active Order Block zone!")
+alertcondition(alertZoneInvalidated, "OB Zone Invalidated", "An active Order Block was violated and invalidated!")
